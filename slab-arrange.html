@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מחשבון מידות — פיזור חלקים על לוח</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#0a0a0a; font-family:'Segoe UI',Arial,sans-serif; color:#fff;
+    min-height:100vh; padding:30px 20px 80px;
+  }
+  .wrap { max-width:1300px; margin:0 auto; }
+  .header { text-align:center; margin-bottom:32px; }
+  .header h1 { font-size:24px; font-weight:900; }
+  .header h1 span { color:#FF5C2E; }
+  .header p { color:#555; font-size:13px; margin-top:6px; }
+
+  .grid { display:grid; grid-template-columns: 320px 1fr; gap:24px; align-items:start; }
+  @media (max-width:900px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel { background:#111; border:1px solid #1e1e1e; border-radius:18px; padding:22px; }
+  .panel h3 {
+    font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
+    color:#FF5C2E; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #1e1e1e;
+  }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:12px; color:#777; margin-bottom:6px; }
+  .row2 { display:flex; gap:8px; }
+  input[type=text], input[type=number] {
+    width:100%; background:#0a0a0a; border:1px solid #222; border-radius:10px;
+    padding:9px 11px; color:#fff; font-size:13px; font-family:inherit; outline:none;
+  }
+  input:focus { border-color:#FF5C2E; }
+
+  .upload-zone {
+    border:2px dashed #222; border-radius:14px; padding:20px; text-align:center;
+    cursor:pointer; transition:border-color .15s; margin-bottom:16px;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color:#FF5C2E; }
+  .upload-zone .icon { font-size:24px; margin-bottom:6px; }
+  .upload-zone .txt { font-size:12px; color:#555; }
+  #file-input { display:none; }
+
+  .piece-row {
+    display:flex; gap:6px; align-items:center; margin-bottom:8px;
+    border:1px solid transparent; border-radius:10px; padding:2px;
+  }
+  .piece-row.is-cutout { border-color:#2a1500; background:#0f0800; }
+  .piece-row .swatch { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+  .piece-row input { font-size:13px; padding:8px 9px; }
+  .piece-row .cutout-toggle {
+    flex-shrink:0; width:26px; height:26px; border-radius:7px; border:1px solid #2a2a2a;
+    background:#0a0a0a; color:#444; font-size:12px; cursor:pointer; display:flex;
+    align-items:center; justify-content:center;
+  }
+  .piece-row .cutout-toggle.active { border-color:#FF5C2E; color:#FF5C2E; background:rgba(255,92,46,0.1); }
+  .piece-row .del-row { color:#333; cursor:pointer; font-size:14px; padding:0 4px; flex-shrink:0; }
+  .piece-row .del-row:hover { color:#ff4444; }
+
+  .btn-add-row {
+    width:100%; background:transparent; border:1px dashed #2a2a2a; color:#666;
+    border-radius:10px; padding:9px; font-size:12px; cursor:pointer; margin-bottom:14px;
+    font-family:inherit; transition:all .15s;
+  }
+  .btn-add-row:hover { border-color:#FF5C2E; color:#FF5C2E; }
+
+  .btn-main {
+    width:100%; background:#FF5C2E; color:#fff; border:none; border-radius:12px;
+    padding:13px; font-size:14px; font-weight:800; cursor:pointer; margin-top:4px;
+    transition:opacity .15s;
+  }
+  .btn-main:hover { opacity:.9; }
+  .btn-secondary {
+    width:100%; background:transparent; border:1px solid #2a2a2a; color:#888;
+    border-radius:10px; padding:10px; font-size:13px; cursor:pointer; margin-top:8px;
+    font-family:inherit;
+  }
+  .btn-secondary:hover { border-color:#FF5C2E; color:#FF5C2E; }
+
+  .hint {
+    background:#0f0800; border:1px solid #2a1500; border-radius:10px;
+    padding:10px 12px; font-size:11px; color:#998866; margin-top:14px; line-height:1.5;
+  }
+
+  /* CANVAS AREA */
+  .stage-wrap {
+    background:#1a1a1a; border-radius:18px; padding:24px;
+    display:flex; align-items:center; justify-content:center;
+    min-height:400px; overflow:auto;
+  }
+  .stage-placeholder { color:#444; font-size:14px; }
+  #stage {
+    position:relative; background:#222; border-radius:8px;
+    overflow:visible;
+  }
+  #slab-img { position:absolute; top:0; left:0; display:block; border-radius:8px; user-select:none; pointer-events:none; }
+
+  .piece {
+    position:absolute; cursor:move; display:flex; align-items:center; justify-content:center;
+    border:1.5px solid; border-radius:2px; font-size:12px; font-weight:700; color:#fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.95); user-select:none; touch-action:none;
+    background-blend-mode: normal;
+  }
+  .piece.cutout {
+    border-style:dashed; background: rgba(255,255,255,0.45) !important;
+    color:#222; text-shadow:none;
+  }
+  .piece:not(.cutout) .piece-label {
+    position:absolute; bottom:-22px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,0.85); padding:2px 8px; border-radius:4px;
+    white-space:nowrap; font-size:11px; border:1px solid #444;
+  }
+  .piece:not(.cutout) .piece-label::before {
+    content:''; position:absolute; top:-6px; left:50%; width:1px; height:6px; background:#888;
+  }
+  .piece.snapping { border-width:2px !important; }
+  .snap-guide {
+    position:absolute; background:#FF5C2E; z-index:15; pointer-events:none;
+  }
+  .piece .ctrl-btn {
+    position:absolute; width:22px; height:22px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:12px;
+    cursor:pointer; z-index:10; background:#111; border:2px solid #444; color:#aaa;
+  }
+  .piece .rotate-btn { top:-11px; left:-11px; border-color:#FF5C2E; }
+  .piece .edit-btn { top:-11px; left:18px; border-color:#5BC0EB; }
+  .piece .del-btn { top:-11px; right:-11px; }
+  .piece .del-btn:hover { border-color:#ff4444; color:#ff4444; }
+
+  .edit-popover {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    background:#111; border:1px solid #FF5C2E; border-radius:10px; padding:8px;
+    display:flex; gap:6px; align-items:center; z-index:20; box-shadow:0 4px 20px rgba(0,0,0,0.6);
+  }
+  .edit-popover input {
+    width:55px; font-size:12px; padding:6px 7px; background:#0a0a0a; color:#fff;
+    border:1px solid #2a2a2a; border-radius:6px; text-align:center;
+  }
+  .edit-popover .confirm-btn {
+    background:#FF5C2E; border:none; border-radius:6px; color:#fff; font-size:13px;
+    width:26px; height:26px; cursor:pointer; flex-shrink:0;
+  }
+
+  .dxf-zone {
+    border:2px dashed #2a1500; border-radius:14px; padding:18px; text-align:center;
+    cursor:pointer; transition:border-color .15s; margin-bottom:10px; background:#0f0800;
+  }
+  .dxf-zone:hover, .dxf-zone.drag { border-color:#FF5C2E; }
+  .dxf-zone .icon { font-size:22px; margin-bottom:6px; }
+  .dxf-zone .txt { font-size:12px; color:#998866; }
+  #dxf-input { display:none; }
+
+  .piece.seam-connected { box-shadow: 0 0 0 2px #FFD93D; }
+  .seam-line { position:absolute; background:#FFD93D; z-index:16; pointer-events:none; border-radius:2px; box-shadow:0 0 8px #FFD93D; }
+  .seam-label {
+    position:absolute; z-index:17; pointer-events:none; background:#1a1500; color:#FFD93D;
+    border:1px solid #FFD93D; border-radius:6px; padding:2px 8px; font-size:11px; font-weight:700;
+    white-space:nowrap;
+  }
+
+  .dxf-results { margin-top:10px; max-height:220px; overflow-y:auto; }
+  .dxf-row {
+    display:flex; align-items:center; gap:8px; background:#0a0a0a;
+    border:1px solid #1e1e1e; border-radius:10px; padding:8px 10px; margin-bottom:6px;
+  }
+  .dxf-row input[type=checkbox] { accent-color:#FF5C2E; width:16px; height:16px; flex-shrink:0; }
+  .dxf-row input[type=number] { width:60px; font-size:12px; padding:6px 8px; }
+  .dxf-row .x-sep { color:#444; font-size:12px; }
+  .unit-toggle { display:flex; gap:6px; margin-bottom:10px; }
+  .unit-btn {
+    flex:1; background:#0a0a0a; border:1px solid #222; border-radius:8px;
+    padding:7px; color:#666; font-size:12px; cursor:pointer; text-align:center;
+  }
+  .unit-btn.sel { background:rgba(255,92,46,0.1); border-color:#FF5C2E; color:#FF5C2E; font-weight:700; }
+  .btn-add-dxf {
+    width:100%; background:#1a1a1a; border:1px solid #2a2a2a; color:#FF5C2E;
+    border-radius:10px; padding:9px; font-size:12px; font-weight:700; cursor:pointer; margin-top:6px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <h1>מחשבון מידות <span>+ פיזור</span></h1>
+    <p>הזן מידות → ריבועים בקנה מידה נכון → גרור וסבב על תמונת הלוח</p>
+  </div>
+
+  <div class="grid">
+
+    <!-- LEFT PANEL -->
+    <div class="panel">
+      <h3>01 — תמונת הלוח</h3>
+      <div class="upload-zone" id="upload-zone">
+        <div class="icon">📷</div>
+        <div class="txt">גרור תמונה או לחץ להעלאה</div>
+      </div>
+      <input type="file" id="file-input" accept="image/*">
+
+      <div class="field">
+        <div class="row2">
+          <div style="flex:1"><label>אורך לוח (ס"מ)</label><input type="number" id="slab-w" value="320"></div>
+          <div style="flex:1"><label>רוחב לוח (ס"מ)</label><input type="number" id="slab-h" value="160"></div>
+        </div>
+      </div>
+
+      <h3 style="margin-top:20px">02 — ייבוא קובץ מדידה (DXF)</h3>
+      <div class="dxf-zone" id="dxf-zone">
+        <div class="icon">📐</div>
+        <div class="txt">גרור קובץ DXF ממדידת Proliner</div>
+      </div>
+      <input type="file" id="dxf-input" accept=".dxf">
+      <div class="unit-toggle">
+        <div class="unit-btn sel" id="unit-mm" onclick="setUnit('mm')">הקובץ במ"מ</div>
+        <div class="unit-btn" id="unit-cm" onclick="setUnit('cm')">הקובץ בס"מ</div>
+      </div>
+      <div class="dxf-results" id="dxf-results"></div>
+      <button class="btn-add-dxf" id="dxf-add-btn" style="display:none" onclick="addDxfToCalc()">+ הוסף למחשבון</button>
+
+      <h3 style="margin-top:20px">03 — מחשבון חלקים</h3>
+      <div id="pieces-calc"></div>
+      <button class="btn-add-row" onclick="addRow()">+ הוסף שורה</button>
+
+      <button class="btn-main" onclick="generatePieces()">צור חלקים על הלוח</button>
+      <button class="btn-secondary" onclick="arrangeOptimal()">📐 סידור אופטימלי (ניצול לוח)</button>
+      <div class="hint" id="arrange-result" style="display:none"></div>
+      <button class="btn-secondary" onclick="downloadImage()">📥 הורד תמונה</button>
+      <button class="btn-secondary" onclick="clearAll()">🗑️ נקה הכל</button>
+
+      <h3 style="margin-top:20px">04 — פתח מדויק ביחידה</h3>
+      <div class="field">
+        <label>יחידה</label>
+        <select id="unit-select" onchange="onUnitSelect()"></select>
+      </div>
+      <div class="field">
+        <div class="row2">
+          <div style="flex:1"><label>מרחק משמאל (ס"מ)</label><input type="number" id="cut-dist-left" oninput="syncCutDist('left')"></div>
+          <div style="flex:1"><label>מרחק מימין (ס"מ)</label><input type="number" id="cut-dist-right" oninput="syncCutDist('right')"></div>
+        </div>
+      </div>
+      <div class="field">
+        <div class="row2">
+          <div style="flex:1"><label>רוחב הכיור (ס"מ)</label><input type="number" id="cut-sink-w" placeholder="אופציונלי"></div>
+          <div style="flex:1"><label>עומק הכיור (ס"מ)</label><input type="number" id="cut-sink-h" placeholder="אופציונלי"></div>
+        </div>
+      </div>
+      <button class="btn-main" onclick="addCutoutToUnit()">מקם פתח ביחידה</button>
+
+      <h3 style="margin-top:20px">05 — חיבור משטחים (יחידה גדולה מהלוח)</h3>
+      <div class="field">
+        <div class="row2">
+          <div style="flex:1"><label>אורך כולל (ס"מ)</label><input type="number" id="conn-total" placeholder="400"></div>
+          <div style="flex:1"><label>רוחב (ס"מ)</label><input type="number" id="conn-width" placeholder="90"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>מרחק לנקודת החיבור (ס"מ מהקצה)</label>
+        <input type="number" id="conn-split" placeholder="220">
+      </div>
+      <button class="btn-main" onclick="splitConnectedPieces()">פצל לשני חלקים + מעקב הצמדה</button>
+
+      <div class="hint">💡 גרור חלק כדי להזיז · קרוב לחלק/קצה אחר = הצמדה אוטומטית · 🔄 סבב 90° · ✎ ערוך מידות · 🕳️ בשורה = פתח (כיור/כיריים) · 🔗 שני חלקים מפוצלים — גרור אחד לקצה השני וקבל "מחובר" כשהם נוגעים בקצה תואם</div>
+    </div>
+
+    <!-- RIGHT — STAGE -->
+    <div class="stage-wrap" id="stage-wrap">
+      <div class="stage-placeholder" id="placeholder">העלה תמונה כדי להתחיל</div>
+      <div id="stage" style="display:none">
+        <img id="slab-img">
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let slabImg = null;
+let rowCount = 0;
+let pieces = []; // {id, el, w, h, x, y, rotated, color, label, isCutout}
+let pieceIdCounter = 0;
+let dxfUnit = 'mm';
+let dxfShapes = [];
+const COLORS = ['#FF5C2E','#4ECDC4','#FFD93D','#A78BFA','#6BCB77','#FF6B9D','#5BC0EB','#F4A261'];
+
+// ── CALCULATOR ROWS ──────────────────────────────────────────────────────
+function addRow(presetW, presetH) {
+  rowCount++;
+  const calc = document.getElementById('pieces-calc');
+  const row = document.createElement('div');
+  row.className = 'piece-row';
+  row.id = 'row-' + rowCount;
+  const color = COLORS[(rowCount - 1) % COLORS.length];
+  row.innerHTML = `
+    <div class="swatch" style="background:${color}"></div>
+    <input type="number" placeholder="אורך" id="row-w-${rowCount}" value="${presetW || ''}">
+    <input type="number" placeholder="רוחב" id="row-h-${rowCount}" value="${presetH || ''}">
+    <input type="number" placeholder="כמ׳" id="row-q-${rowCount}" value="1" style="max-width:46px">
+    <span class="cutout-toggle" id="cutout-${rowCount}" title="סמן כפתח (כיור/כיריים)" onclick="toggleCutout(${rowCount})">🕳️</span>
+    <span class="del-row" onclick="removeRow(${rowCount})">✕</span>
+  `;
+  row.dataset.color = color;
+  row.dataset.cutout = 'false';
+  calc.appendChild(row);
+}
+
+function toggleCutout(n) {
+  const row = document.getElementById('row-' + n);
+  const btn = document.getElementById('cutout-' + n);
+  const isCutout = row.dataset.cutout === 'true';
+  row.dataset.cutout = isCutout ? 'false' : 'true';
+  row.classList.toggle('is-cutout', !isCutout);
+  btn.classList.toggle('active', !isCutout);
+}
+
+function removeRow(n) {
+  const row = document.getElementById('row-' + n);
+  if (row) row.remove();
+}
+
+// init with 4 default rows
+for (let i = 0; i < 4; i++) addRow();
+
+// ── SLAB IMAGE UPLOAD ──────────────────────────────────────────────────────
+const uploadZone = document.getElementById('upload-zone');
+const fileInput = document.getElementById('file-input');
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag');
+  if (e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadImage(e.target.files[0]); });
+
+function loadImage(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const tempImg = new Image();
+    tempImg.onload = () => {
+      slabImg = tempImg;
+      uploadZone.querySelector('.txt').textContent = '✓ ' + file.name;
+      setupStage();
+    };
+    tempImg.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+let lastSlabW = null;
+
+function setupStage() {
+  document.getElementById('placeholder').style.display = 'none';
+  const stage = document.getElementById('stage');
+  stage.style.display = 'block';
+
+  const slabImgEl = document.getElementById('slab-img');
+  slabImgEl.src = slabImg.src;
+
+  lastSlabW = null; // תמונה חדשה — אין סקייל קודם לשמור עליו
+  resizeStage();
+}
+
+// קוראים לזה גם כשמשנים את מידות הלוח בשדות הקלט, אחרי שהתמונה כבר הועלתה —
+// כך שגודל הקנבס בפועל יתאים תמיד לערכים שמוצגים בשדות, והחלקים הקיימים מתכווצים/מתרחבים יחד איתו
+function resizeStage() {
+  if (!slabImg) return;
+  const slabW = parseFloat(document.getElementById('slab-w').value);
+  const slabH = parseFloat(document.getElementById('slab-h').value);
+  if (!slabW || !slabH) return;
+
+  const containerW = 800;
+  const containerH = containerW * (slabH / slabW);
+
+  const stage = document.getElementById('stage');
+  stage.style.width = containerW + 'px';
+  stage.style.height = containerH + 'px';
+
+  const slabImgEl = document.getElementById('slab-img');
+  slabImgEl.style.width = containerW + 'px';
+  slabImgEl.style.height = containerH + 'px';
+
+  const ratio = lastSlabW ? lastSlabW / slabW : 1;
+  if (ratio !== 1) {
+    pieces.forEach(p => {
+      const left = parseFloat(p.el.style.left) * ratio;
+      const top = parseFloat(p.el.style.top) * ratio;
+      const w = parseFloat(p.el.style.width) * ratio;
+      const h = parseFloat(p.el.style.height) * ratio;
+      p.el.style.left = left + 'px'; p.el.style.top = top + 'px';
+      p.el.style.width = w + 'px'; p.el.style.height = h + 'px';
+      p.x = left; p.y = top;
+    });
+    pieces.forEach(p => { if (p.connId) updateConnectionVisual(p); });
+  }
+  lastSlabW = slabW;
+}
+
+document.getElementById('slab-w').addEventListener('input', resizeStage);
+document.getElementById('slab-h').addEventListener('input', resizeStage);
+
+function pxPerCm() {
+  const slabW = parseFloat(document.getElementById('slab-w').value);
+  return 800 / slabW;
+}
+
+// ── DXF UPLOAD & PARSE ───────────────────────────────────────────────────
+const dxfZone = document.getElementById('dxf-zone');
+const dxfInput = document.getElementById('dxf-input');
+dxfZone.addEventListener('click', () => dxfInput.click());
+dxfZone.addEventListener('dragover', e => { e.preventDefault(); dxfZone.classList.add('drag'); });
+dxfZone.addEventListener('dragleave', () => dxfZone.classList.remove('drag'));
+dxfZone.addEventListener('drop', e => {
+  e.preventDefault(); dxfZone.classList.remove('drag');
+  if (e.dataTransfer.files[0]) loadDxf(e.dataTransfer.files[0]);
+});
+dxfInput.addEventListener('change', e => { if (e.target.files[0]) loadDxf(e.target.files[0]); });
+
+function setUnit(u) {
+  dxfUnit = u;
+  document.getElementById('unit-mm').classList.toggle('sel', u === 'mm');
+  document.getElementById('unit-cm').classList.toggle('sel', u === 'cm');
+  if (dxfShapes.length) renderDxfResults();
+}
+
+function loadDxf(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result;
+    try {
+      const debug = parseDXF(text, true);
+      console.log('DXF debug info:', debug);
+
+      if (!debug.isTextDxf) {
+        alert('הקובץ לא נראה כמו DXF טקסטואלי תקין (אולי בינארי, או קובץ אחר בכלל). פתח אותו בעורך טקסט ושלח לי את 30 השורות הראשונות כדי שאבדוק.');
+        return;
+      }
+      if (!debug.foundEntitiesSection) {
+        alert('נמצא קובץ DXF אבל לא הצלחתי לאתר את מקטע ENTITIES. שלח לי את הקובץ (או קישור להורדה) ואבדוק את המבנה המדויק.');
+        return;
+      }
+      if (debug.entityTypesFound.length === 0) {
+        alert('נמצא מקטע ENTITIES אבל הוא ריק. ייתכן שהמדידה נמצאת ב-BLOCK נפרד ולא ב-ENTITIES הראשי.');
+        return;
+      }
+      if (debug.shapes.length === 0) {
+        alert(`נמצאו צורות מסוג: ${debug.entityTypesFound.join(', ')} — אבל אף אחת לא הצליחה להתפענח כצורה סגורה עם רוחב/גובה תקינים.\n\nשלח לי את הקובץ ואבדוק בדיוק למה.`);
+        return;
+      }
+
+      dxfShapes = debug.shapes;
+      dxfZone.querySelector('.txt').textContent = '✓ ' + file.name + ` (${debug.shapes.length} צורות)`;
+      renderDxfResults();
+    } catch (err) {
+      console.error(err);
+      alert('שגיאה בפענוח: ' + err.message + '\n\nשלח לי את הקובץ DXF ואבדוק ביחד מה המבנה שלו.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Minimal ASCII DXF parser — extracts LWPOLYLINE / POLYLINE+VERTEX / LINE entities
+// Pass debug=true to get back diagnostic info instead of just the shape list
+function parseDXF(text, debug) {
+  const info = { isTextDxf:false, foundEntitiesSection:false, entityTypesFound:[], shapes:[] };
+
+  // sanity check: real ASCII DXF files start with "0\nSECTION" near the top
+  if (!/\bSECTION\b/.test(text) || !/\bENTITIES\b/.test(text)) {
+    return debug ? info : [];
+  }
+  info.isTextDxf = true;
+
+  const lines = text.split(/\r\n|\r|\n/);
+  const pairs = [];
+  for (let i = 0; i < lines.length - 1; i += 2) {
+    pairs.push({ code: parseInt(lines[i].trim()), value: lines[i+1] !== undefined ? lines[i+1].trim() : '' });
+  }
+
+  // find ENTITIES section
+  let start = -1;
+  for (let i = 0; i < pairs.length - 1; i++) {
+    if (pairs[i].code === 0 && pairs[i].value === 'SECTION' && pairs[i+1] && pairs[i+1].code === 2 && pairs[i+1].value === 'ENTITIES') {
+      start = i + 2; break;
+    }
+  }
+  if (start === -1) return debug ? info : [];
+  info.foundEntitiesSection = true;
+
+  const rawEntities = [];
+  let current = null;
+  for (let i = start; i < pairs.length; i++) {
+    const { code, value } = pairs[i];
+    if (code === 0) {
+      if (value === 'ENDSEC') break;
+      if (current) rawEntities.push(current);
+      current = { type: value, points: [], closed: false, _x: undefined };
+      continue;
+    }
+    if (!current) continue;
+    if (code === 10) current._x = parseFloat(value);
+    else if (code === 20) {
+      if (current._x !== undefined) { current.points.push([current._x, parseFloat(value)]); current._x = undefined; }
+    }
+    else if (code === 11) current._x2 = parseFloat(value);
+    else if (code === 21) {
+      if (current._x2 !== undefined) { current.points.push([current._x2, parseFloat(value)]); current._x2 = undefined; }
+    }
+    else if (code === 70) current.closed = (parseInt(value) & 1) === 1;
+  }
+  if (current) rawEntities.push(current);
+
+  info.entityTypesFound = [...new Set(rawEntities.map(e => e.type))];
+
+  // merge POLYLINE + following VERTEX entities
+  const shapes = [];
+  let i = 0;
+  while (i < rawEntities.length) {
+    const e = rawEntities[i];
+    if (e.type === 'LWPOLYLINE' && e.points.length >= 3) {
+      shapes.push({ points: e.points, closed: e.closed });
+      i++;
+    } else if (e.type === 'POLYLINE') {
+      const pts = [];
+      let j = i + 1;
+      while (j < rawEntities.length && rawEntities[j].type === 'VERTEX') { pts.push(...rawEntities[j].points); j++; }
+      if (pts.length >= 3) shapes.push({ points: pts, closed: e.closed });
+      i = j;
+    } else if (e.type === 'LINE' && e.points.length === 2) {
+      // מדידות לייזר (כמו Proliner) מייצאות לעיתים את היקף הצורה כרצף קטעי LINE בודדים —
+      // מחברים קטעים עוקבים שמתחילים בדיוק איפה הקודם נגמר, עד שהשרשרת נסגרת לצורה
+      const TOL = 1;
+      const near = (a, b) => Math.abs(a[0] - b[0]) < TOL && Math.abs(a[1] - b[1]) < TOL;
+      const chain = [e.points[0], e.points[1]];
+      let j = i + 1;
+      while (j < rawEntities.length && rawEntities[j].type === 'LINE' && rawEntities[j].points.length === 2) {
+        const seg = rawEntities[j];
+        if (!near(chain[chain.length - 1], seg.points[0])) break;
+        chain.push(seg.points[1]);
+        j++;
+        if (near(chain[chain.length - 1], chain[0])) break;
+      }
+      if (chain.length >= 4 && near(chain[chain.length - 1], chain[0])) {
+        shapes.push({ points: chain, closed: true });
+      }
+      i = j;
+    } else {
+      i++;
+    }
+  }
+
+  // compute bounding box per shape (in file units)
+  info.shapes = shapes.map(s => {
+    const xs = s.points.map(p => p[0]), ys = s.points.map(p => p[1]);
+    const w = Math.max(...xs) - Math.min(...xs);
+    const h = Math.max(...ys) - Math.min(...ys);
+    return { w: Math.round(w * 10) / 10, h: Math.round(h * 10) / 10 };
+  }).filter(s => s.w > 1 && s.h > 1); // filter out degenerate/noise shapes
+
+  return debug ? info : info.shapes;
+}
+
+function renderDxfResults() {
+  const div = document.getElementById('dxf-results');
+  const factor = dxfUnit === 'mm' ? 0.1 : 1; // convert to cm
+  div.innerHTML = dxfShapes.map((s, i) => {
+    const wCm = Math.round(s.w * factor * 10) / 10;
+    const hCm = Math.round(s.h * factor * 10) / 10;
+    return `
+      <div class="dxf-row">
+        <input type="checkbox" id="dxf-chk-${i}" checked>
+        <input type="number" id="dxf-w-${i}" value="${wCm}">
+        <span class="x-sep">×</span>
+        <input type="number" id="dxf-h-${i}" value="${hCm}">
+        <span style="font-size:11px;color:#555">ס"מ</span>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('dxf-add-btn').style.display = dxfShapes.length ? 'block' : 'none';
+}
+
+function addDxfToCalc() {
+  dxfShapes.forEach((s, i) => {
+    const chk = document.getElementById('dxf-chk-' + i);
+    if (!chk || !chk.checked) return;
+    const w = parseFloat(document.getElementById('dxf-w-' + i).value);
+    const h = parseFloat(document.getElementById('dxf-h-' + i).value);
+    addRow(w, h);
+  });
+}
+
+// ── GENERATE PIECES FROM CALCULATOR ───────────────────────────────────────
+function generatePieces() {
+  if (!slabImg) { alert('העלה תמונת לוח קודם 📷'); return; }
+
+  const rows = document.querySelectorAll('.piece-row');
+  let stackOffset = 0;
+
+  rows.forEach(row => {
+    const idSuffix = row.id.split('-')[1];
+    const w = parseFloat(document.getElementById('row-w-' + idSuffix).value);
+    const h = parseFloat(document.getElementById('row-h-' + idSuffix).value);
+    const qty = parseInt(document.getElementById('row-q-' + idSuffix).value) || 1;
+    const color = row.dataset.color;
+    const isCutout = row.dataset.cutout === 'true';
+    if (!w || !h) return;
+
+    for (let i = 0; i < qty; i++) {
+      createPiece(w, h, color, 20 + stackOffset, 20 + stackOffset, isCutout);
+      stackOffset += 18;
+    }
+  });
+}
+
+function createPiece(wCm, hCm, color, x, y, isCutout, connId, connLabel) {
+  const scale = pxPerCm();
+  const id = pieceIdCounter++;
+  const wPx = wCm * scale, hPx = hCm * scale;
+
+  const el = document.createElement('div');
+  el.className = 'piece' + (isCutout ? ' cutout' : '');
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.style.width = wPx + 'px';
+  el.style.height = hPx + 'px';
+  el.style.borderColor = isCutout ? '#fff' : color;
+  el.style.background = isCutout ? 'rgba(255,255,255,0.55)' : 'transparent';
+
+  const label = (isCutout ? '🕳️ ' : '') + wCm + '×' + hCm + (connLabel ? ' ' + connLabel : '');
+  el.innerHTML = `
+    <span class="ctrl-btn rotate-btn" title="סבב 90°">🔄</span>
+    <span class="ctrl-btn edit-btn" title="ערוך מידות">✎</span>
+    <span class="ctrl-btn del-btn" title="מחק">✕</span>
+    <span class="piece-label">${label}</span>
+  `;
+
+  document.getElementById('stage').appendChild(el);
+
+  const piece = { id, el, w: wCm, h: hCm, x, y, rotated: false, color, label, isCutout: !!isCutout, connId: connId || null };
+  pieces.push(piece);
+
+  makeDraggable(el, piece);
+
+  el.querySelector('.rotate-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    piece.rotated = !piece.rotated;
+    el.style.transform = piece.rotated ? 'rotate(90deg)' : 'none';
+    updateConnectionVisual(piece);
+  });
+
+  el.querySelector('.edit-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    openEditPopover(piece);
+  });
+
+  el.querySelector('.del-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    clearSeamVisual(piece.connId);
+    el.remove();
+    pieces = pieces.filter(p => p.id !== id);
+    refreshUnitSelect();
+  });
+
+  refreshUnitSelect();
+  if (piece.connId) updateConnectionVisual(piece);
+  return piece;
+}
+
+// ── SEAM CONNECTION (split a piece bigger than the slab into 2 linked parts) ──
+function splitConnectedPieces() {
+  if (!slabImg) { alert('העלה תמונת לוח קודם 📷'); return; }
+  const total = parseFloat(document.getElementById('conn-total').value);
+  const width = parseFloat(document.getElementById('conn-width').value);
+  const split = parseFloat(document.getElementById('conn-split').value);
+  if (!total || !width || !split || split <= 0 || split >= total) {
+    alert('הזן אורך כולל, רוחב, ומרחק חיבור תקין (גדול מ-0 וקטן מהאורך הכולל)');
+    return;
+  }
+  const connId = 'conn-' + Date.now();
+  const color = COLORS[pieceIdCounter % COLORS.length];
+  createPiece(split, width, color, 20, 20, false, connId, '(1/2)');
+  createPiece(Math.round((total - split) * 10) / 10, width, color, 20, 160 + width, false, connId, '(2/2)');
+}
+
+function getConnPartner(piece) {
+  if (!piece.connId) return null;
+  return pieces.find(p => p.connId === piece.connId && p.id !== piece.id) || null;
+}
+
+function clearSeamVisual(connId) {
+  if (!connId) return;
+  const line = document.getElementById('seam-line-' + connId);
+  const label = document.getElementById('seam-label-' + connId);
+  if (line) line.remove();
+  if (label) label.remove();
+}
+
+function updateConnectionVisual(piece) {
+  if (!piece.connId) return;
+  const partner = getConnPartner(piece);
+  clearSeamVisual(piece.connId);
+  if (!partner) { piece.el.classList.remove('seam-connected'); return; }
+
+  const a = piece.el, b = partner.el;
+  const aLeft = parseFloat(a.style.left), aTop = parseFloat(a.style.top);
+  const aW = parseFloat(a.style.width), aH = parseFloat(a.style.height);
+  const bLeft = parseFloat(b.style.left), bTop = parseFloat(b.style.top);
+  const bW = parseFloat(b.style.width), bH = parseFloat(b.style.height);
+
+  const heightMatch = Math.abs(aH - bH) < 6;
+  const topMatch = Math.abs(aTop - bTop) < 6;
+  const gapRightA = Math.abs((aLeft + aW) - bLeft);
+  const gapRightB = Math.abs((bLeft + bW) - aLeft);
+  const touchingX = (gapRightA < SNAP_THRESHOLD || gapRightB < SNAP_THRESHOLD) && heightMatch && topMatch;
+
+  const widthMatch = Math.abs(aW - bW) < 6;
+  const leftMatch = Math.abs(aLeft - bLeft) < 6;
+  const gapBottomA = Math.abs((aTop + aH) - bTop);
+  const gapBottomB = Math.abs((bTop + bH) - aTop);
+  const touchingY = (gapBottomA < SNAP_THRESHOLD || gapBottomB < SNAP_THRESHOLD) && widthMatch && leftMatch;
+
+  let connected = false, seamX, seamY, seamW, seamH, horizontal = true;
+  if (touchingX) {
+    connected = true; horizontal = true;
+    seamX = (gapRightA <= gapRightB ? aLeft + aW : bLeft + bW) - 3;
+    seamY = Math.min(aTop, bTop);
+    seamH = Math.max(aH, bH);
+    seamW = 6;
+  } else if (touchingY) {
+    connected = true; horizontal = false;
+    seamY = (gapBottomA <= gapBottomB ? aTop + aH : bTop + bH) - 3;
+    seamX = Math.min(aLeft, bLeft);
+    seamW = Math.max(aW, bW);
+    seamH = 6;
+  }
+
+  a.classList.toggle('seam-connected', connected);
+  b.classList.toggle('seam-connected', connected);
+  if (!connected) return;
+
+  const stage = document.getElementById('stage');
+  const line = document.createElement('div');
+  line.id = 'seam-line-' + piece.connId;
+  line.className = 'seam-line';
+  line.style.left = seamX + 'px'; line.style.top = seamY + 'px';
+  line.style.width = seamW + 'px'; line.style.height = seamH + 'px';
+  stage.appendChild(line);
+
+  const label = document.createElement('div');
+  label.id = 'seam-label-' + piece.connId;
+  label.className = 'seam-label';
+  label.textContent = '🔗 מחובר';
+  label.style.left = (horizontal ? seamX - 20 : seamX + seamW / 2 - 28) + 'px';
+  label.style.top = (horizontal ? seamY + seamH / 2 - 10 : seamY - 22) + 'px';
+  stage.appendChild(label);
+}
+
+// ── OPTIMAL ARRANGEMENT (shelf packing — minimize slab waste) ────────────
+function arrangeOptimal() {
+  if (!slabImg) { alert('העלה תמונת לוח קודם 📷'); return; }
+  const slabW = parseFloat(document.getElementById('slab-w').value);
+  const slabH = parseFloat(document.getElementById('slab-h').value);
+  const real = pieces.filter(p => !p.isCutout);
+  if (!real.length) { alert('אין חלקים על הלוח לסדר'); return; }
+
+  const GAP_CM = 3; // מרווח חיתוך (קרף מסור) בין חלקים
+
+  // לכל חלק: בוחרים כיוון (מקור/מסובב) שמתאים לשני ממדי הלוח
+  const items = real.map(p => {
+    let w = p.w, h = p.h, rotate = false;
+    const fitsOriginal = w <= slabW - 2 * GAP_CM && h <= slabH - 2 * GAP_CM;
+    const fitsRotated = h <= slabW - 2 * GAP_CM && w <= slabH - 2 * GAP_CM;
+    if (!fitsOriginal && fitsRotated) {
+      [w, h] = [h, w]; rotate = true;
+    } else if (fitsOriginal && fitsRotated && h > w) {
+      [w, h] = [h, w]; rotate = true; // מעדיפים אוריינטציה עם גובה קטן יותר — יותר מקום לשורות
+    }
+    return { piece: p, w, h, rotate };
+  });
+
+  // Shelf algorithm (NFDH): מסדרים לפי גובה יורד, ממלאים שורות לרוחב הלוח
+  items.sort((a, b) => b.h - a.h);
+
+  let x = GAP_CM, y = GAP_CM, rowH = 0;
+  const placed = [], overflow = [];
+  items.forEach(it => {
+    if (it.w > slabW - 2 * GAP_CM) { overflow.push(it.piece); return; }
+    if (x + it.w > slabW - GAP_CM) { x = GAP_CM; y += rowH + GAP_CM; rowH = 0; }
+    if (y + it.h > slabH - GAP_CM) { overflow.push(it.piece); return; }
+    placed.push({ piece: it.piece, x, y, rotate: it.rotate, w: it.w, h: it.h });
+    x += it.w + GAP_CM;
+    rowH = Math.max(rowH, it.h);
+  });
+
+  const scale = pxPerCm();
+  let usedArea = 0;
+  placed.forEach(pl => {
+    const p = pl.piece;
+    if (pl.rotate) { p.w = pl.w; p.h = pl.h; }
+    p.rotated = false;
+    p.el.style.transform = 'none';
+    p.el.style.width = (p.w * scale) + 'px';
+    p.el.style.height = (p.h * scale) + 'px';
+    p.el.style.left = (pl.x * scale) + 'px';
+    p.el.style.top = (pl.y * scale) + 'px';
+    p.x = pl.x * scale; p.y = pl.y * scale;
+    const connTag = (p.label.match(/\(\d\/\d\)/) || [''])[0];
+    p.label = p.w + '×' + p.h + (connTag ? ' ' + connTag : '');
+    p.el.querySelector('.piece-label').textContent = p.label;
+    usedArea += p.w * p.h;
+    if (p.connId) updateConnectionVisual(p);
+  });
+
+  const utilization = Math.round((usedArea / (slabW * slabH)) * 1000) / 10;
+  const result = document.getElementById('arrange-result');
+  result.style.display = 'block';
+  result.innerHTML = `✅ מוקמו ${placed.length} חלקים · ניצול לוח: <b>${utilization}%</b>` +
+    (overflow.length ? `<br>⚠️ ${overflow.length} חלקים לא נכנסו ללוח: ${overflow.map(p => p.w + '×' + p.h).join(', ')} — נדרשת פלטה נוספת` : '');
+}
+
+// ── UNIT SELECT (for relative cutout placement) ───────────────────────────
+function refreshUnitSelect() {
+  const sel = document.getElementById('unit-select');
+  const prevVal = sel.value;
+  sel.innerHTML = pieces
+    .filter(p => !p.isCutout)
+    .map(p => `<option value="${p.id}">${p.label} (#${p.id})</option>`)
+    .join('') || '<option value="">אין יחידות עדיין</option>';
+  if (prevVal) sel.value = prevVal;
+}
+
+function onUnitSelect() {
+  const unit = getSelectedUnit();
+  if (!unit) return;
+  document.getElementById('cut-dist-left').value = '';
+  document.getElementById('cut-dist-right').value = '';
+}
+
+function getSelectedUnit() {
+  const id = parseInt(document.getElementById('unit-select').value);
+  return pieces.find(p => p.id === id);
+}
+
+function syncCutDist(changed) {
+  const unit = getSelectedUnit();
+  if (!unit) return;
+  const unitW = unit.w; // real cm width (unrotated reference)
+  const leftEl = document.getElementById('cut-dist-left');
+  const rightEl = document.getElementById('cut-dist-right');
+  if (changed === 'left' && leftEl.value !== '') {
+    rightEl.value = Math.round((unitW - parseFloat(leftEl.value)) * 10) / 10;
+  } else if (changed === 'right' && rightEl.value !== '') {
+    leftEl.value = Math.round((unitW - parseFloat(rightEl.value)) * 10) / 10;
+  }
+}
+
+function addCutoutToUnit() {
+  const unit = getSelectedUnit();
+  if (!unit) { alert('בחר יחידה קודם'); return; }
+  const distLeft = parseFloat(document.getElementById('cut-dist-left').value);
+  if (isNaN(distLeft)) { alert('הזן מרחק משמאל (או מימין)'); return; }
+
+  const scale = pxPerCm();
+  const unitLeft = parseFloat(unit.el.style.left);
+  const unitTop = parseFloat(unit.el.style.top);
+  const unitWpx = parseFloat(unit.el.style.width);
+  const unitHpx = parseFloat(unit.el.style.height);
+
+  const sinkW = parseFloat(document.getElementById('cut-sink-w').value) || 6; // thin marker if not specified
+  const sinkH = parseFloat(document.getElementById('cut-sink-h').value) || unit.h * 0.7;
+
+  const centerXpx = unitLeft + distLeft * scale;
+  const centerYpx = unitTop + unitHpx / 2;
+  const cutWpx = sinkW * scale, cutHpx = sinkH * scale;
+
+  createPiece(sinkW, sinkH, '#ffffff', centerXpx - cutWpx/2, centerYpx - cutHpx/2, true);
+}
+
+// ── EDIT EXISTING PIECE ────────────────────────────────────────────────────
+function openEditPopover(piece) {
+  // remove any existing popover first
+  document.querySelectorAll('.edit-popover').forEach(p => p.remove());
+
+  const pop = document.createElement('div');
+  pop.className = 'edit-popover';
+  pop.innerHTML = `
+    <input type="number" id="edit-w-${piece.id}" value="${piece.w}">
+    <span style="color:#555;font-size:12px">×</span>
+    <input type="number" id="edit-h-${piece.id}" value="${piece.h}">
+    <button class="confirm-btn">✓</button>
+  `;
+  piece.el.appendChild(pop);
+
+  pop.querySelector('.confirm-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    const newW = parseFloat(document.getElementById('edit-w-' + piece.id).value);
+    const newH = parseFloat(document.getElementById('edit-h-' + piece.id).value);
+    if (newW > 0 && newH > 0) {
+      const scale = pxPerCm();
+      piece.w = newW; piece.h = newH;
+      piece.label = (piece.isCutout ? '🕳️ ' : '') + newW + '×' + newH;
+      piece.el.style.width = (newW * scale) + 'px';
+      piece.el.style.height = (newH * scale) + 'px';
+      piece.el.querySelector('.piece-label').textContent = piece.label;
+    }
+    pop.remove();
+  });
+
+  pop.addEventListener('mousedown', e => e.stopPropagation());
+  pop.addEventListener('touchstart', e => e.stopPropagation());
+}
+
+// ── SNAP-TO-EDGE ─────────────────────────────────────────────────────────
+const SNAP_THRESHOLD = 10; // px
+
+function getSnapped(piece, newLeft, newTop, wPx, hPx) {
+  const stage = document.getElementById('stage');
+  const stageW = parseFloat(stage.style.width), stageH = parseFloat(stage.style.height);
+  const right = newLeft + wPx, bottom = newTop + hPx;
+
+  let xTargets = [0, stageW];
+  let yTargets = [0, stageH];
+  pieces.forEach(p => {
+    if (p.id === piece.id) return;
+    const pLeft = parseFloat(p.el.style.left), pTop = parseFloat(p.el.style.top);
+    const pW = parseFloat(p.el.style.width), pH = parseFloat(p.el.style.height);
+    xTargets.push(pLeft, pLeft + pW);
+    yTargets.push(pTop, pTop + pH);
+  });
+
+  let snappedLeft = newLeft, snappedTop = newTop, didSnapX = false, didSnapY = false;
+  for (const t of xTargets) {
+    if (Math.abs(newLeft - t) < SNAP_THRESHOLD) { snappedLeft = t; didSnapX = true; break; }
+    if (Math.abs(right - t) < SNAP_THRESHOLD) { snappedLeft = t - wPx; didSnapX = true; break; }
+  }
+  for (const t of yTargets) {
+    if (Math.abs(newTop - t) < SNAP_THRESHOLD) { snappedTop = t; didSnapY = true; break; }
+    if (Math.abs(bottom - t) < SNAP_THRESHOLD) { snappedTop = t - hPx; didSnapY = true; break; }
+  }
+  return { left: snappedLeft, top: snappedTop, snapped: didSnapX || didSnapY };
+}
+
+// ── DRAG LOGIC (mouse + touch) ────────────────────────────────────────────
+function makeDraggable(el, piece) {
+  function startDrag(clientX, clientY) {
+    const startX = clientX, startY = clientY;
+    const origLeft = parseFloat(el.style.left), origTop = parseFloat(el.style.top);
+    const wPx = parseFloat(el.style.width), hPx = parseFloat(el.style.height);
+
+    function onMove(cx, cy) {
+      const dx = cx - startX, dy = cy - startY;
+      let newLeft = origLeft + dx, newTop = origTop + dy;
+      const snap = getSnapped(piece, newLeft, newTop, wPx, hPx);
+      newLeft = snap.left; newTop = snap.top;
+      el.classList.toggle('snapping', snap.snapped);
+      el.style.left = newLeft + 'px';
+      el.style.top = newTop + 'px';
+      piece.x = newLeft; piece.y = newTop;
+      if (piece.connId) updateConnectionVisual(piece);
+    }
+
+    function mouseMove(e) { onMove(e.clientX, e.clientY); }
+    function touchMove(e) { onMove(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }
+    function stop() {
+      el.classList.remove('snapping');
+      if (piece.connId) updateConnectionVisual(piece);
+      document.removeEventListener('mousemove', mouseMove);
+      document.removeEventListener('mouseup', stop);
+      document.removeEventListener('touchmove', touchMove);
+      document.removeEventListener('touchend', stop);
+    }
+    document.addEventListener('mousemove', mouseMove);
+    document.addEventListener('mouseup', stop);
+    document.addEventListener('touchmove', touchMove, { passive:false });
+    document.addEventListener('touchend', stop);
+  }
+
+  el.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('ctrl-btn') || e.target.closest('.edit-popover')) return;
+    e.preventDefault();
+    document.querySelectorAll('.edit-popover').forEach(p => p.remove());
+    startDrag(e.clientX, e.clientY);
+  });
+  el.addEventListener('touchstart', e => {
+    if (e.target.classList.contains('ctrl-btn') || e.target.closest('.edit-popover')) return;
+    startDrag(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive:true });
+}
+
+// ── CLEAR ALL ──────────────────────────────────────────────────────────────
+function clearAll() {
+  pieces.forEach(p => { clearSeamVisual(p.connId); p.el.remove(); });
+  pieces = [];
+  refreshUnitSelect();
+}
+
+// ── DOWNLOAD AS IMAGE ────────────────────────────────────────────────────
+function downloadImage() {
+  if (!slabImg) { alert('אין תמונה'); return; }
+  const stage = document.getElementById('stage');
+  const w = parseFloat(stage.style.width);
+  const h = parseFloat(stage.style.height);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(slabImg, 0, 0, w, h);
+
+  pieces.forEach(p => {
+    const wPx = parseFloat(p.el.style.width), hPx = parseFloat(p.el.style.height);
+    const x = parseFloat(p.el.style.left), y = parseFloat(p.el.style.top);
+    const cx = x + wPx/2, cy = y + hPx/2;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (p.rotated) ctx.rotate(Math.PI/2);
+
+    if (p.isCutout) {
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillRect(-wPx/2, -hPx/2, wPx, hPx);
+      ctx.strokeStyle = '#fff';
+      ctx.setLineDash([6,4]);
+      ctx.lineWidth = 3;
+      ctx.strokeRect(-wPx/2, -hPx/2, wPx, hPx);
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#222';
+    } else {
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(-wPx/2, -hPx/2, wPx, hPx);
+      ctx.fillStyle = '#fff';
+      ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+    }
+    ctx.font = 'bold 13px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.label, 0, p.isCutout ? 5 : -hPx/2 - 10);
+    ctx.restore();
+  });
+
+  const link = document.createElement('a');
+  link.download = 'slab-arrangement.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+</script>
+</body>
+</html>
