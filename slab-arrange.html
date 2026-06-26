@@ -86,15 +86,15 @@
   /* CANVAS AREA */
   .stage-wrap {
     background:#1a1a1a; border-radius:18px; padding:24px;
-    display:flex; align-items:center; justify-content:center;
     min-height:400px; overflow:auto;
   }
+  .slab-block { display:flex; flex-direction:column; align-items:center; }
   .stage-placeholder { color:#444; font-size:14px; }
-  #stage {
+  .stage {
     position:relative; background:#222; border-radius:8px;
     overflow:visible;
   }
-  #slab-img { position:absolute; top:0; left:0; display:block; border-radius:8px; user-select:none; pointer-events:none; }
+  .slab-img { position:absolute; top:0; left:0; display:block; border-radius:8px; user-select:none; pointer-events:none; }
 
   .piece {
     position:absolute; cursor:move; display:flex; align-items:center; justify-content:center;
@@ -119,13 +119,14 @@
     position:absolute; background:#FF5C2E; z-index:15; pointer-events:none;
   }
   .piece .ctrl-btn {
-    position:absolute; width:22px; height:22px; border-radius:50%;
-    display:flex; align-items:center; justify-content:center; font-size:12px;
+    position:absolute; width:18px; height:18px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:10px;
     cursor:pointer; z-index:10; background:#111; border:2px solid #444; color:#aaa;
   }
-  .piece .rotate-btn { top:-11px; left:-11px; border-color:#FF5C2E; }
-  .piece .edit-btn { top:-11px; left:18px; border-color:#5BC0EB; }
-  .piece .del-btn { top:-11px; right:-11px; }
+  /* כל הכפתורים בתוך גבול היחידה (לא צפים מעליה) — כך שלעולם לא יחרגו מהלוח, גם ביחידה שנוגעת בקצה */
+  .piece .rotate-btn { top:3px; left:3px; border-color:#FF5C2E; }
+  .piece .edit-btn { top:3px; left:25px; border-color:#5BC0EB; }
+  .piece .del-btn { top:3px; right:3px; }
   .piece .del-btn:hover { border-color:#ff4444; color:#ff4444; }
 
   .edit-popover {
@@ -177,6 +178,37 @@
     width:100%; background:#1a1a1a; border:1px solid #2a2a2a; color:#FF5C2E;
     border-radius:10px; padding:9px; font-size:12px; font-weight:700; cursor:pointer; margin-top:6px;
   }
+
+  .slab-card {
+    border:1px solid #1e1e1e; border-radius:14px; padding:14px; margin-bottom:14px; background:#0d0d0d;
+  }
+  .slab-card h4 { font-size:12px; color:#FF5C2E; margin-bottom:10px; }
+  .bookmatch-row {
+    display:flex; align-items:center; gap:6px; font-size:12px; color:#998866; margin-bottom:10px;
+  }
+  .bookmatch-row input { accent-color:#FF5C2E; width:14px; height:14px; }
+
+  .slab-block { margin-bottom:24px; }
+  .slab-block-title { font-size:12px; font-weight:700; color:#FF5C2E; margin-bottom:8px; letter-spacing:1px; }
+  .slab-toolbar { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .slab-toolbar button {
+    flex:1; min-width:140px; background:transparent; border:1px solid #2a2a2a; color:#888;
+    border-radius:8px; padding:8px; font-size:12px; cursor:pointer; font-family:inherit;
+  }
+  .slab-toolbar button:hover { border-color:#FF5C2E; color:#FF5C2E; }
+
+  .waiting-zone { margin-top:10px; }
+  .waiting-zone-label { font-size:12px; color:#FFD93D; margin-bottom:8px; }
+  .waiting-stage {
+    position:relative; background:#1a1500; border:2px dashed #3a2a00; border-radius:12px;
+    min-height:140px; overflow-x:auto; overflow-y:visible; white-space:nowrap;
+  }
+
+  .piece .cross-slab-badge {
+    position:absolute; top:24px; left:3px; background:#1a1500; color:#FFD93D;
+    border:1px solid #FFD93D; border-radius:6px; padding:1px 6px; font-size:10px;
+    white-space:nowrap; z-index:10;
+  }
 </style>
 </head>
 <body>
@@ -191,19 +223,9 @@
 
     <!-- LEFT PANEL -->
     <div class="panel">
-      <h3>01 — תמונת הלוח</h3>
-      <div class="upload-zone" id="upload-zone">
-        <div class="icon">📷</div>
-        <div class="txt">גרור תמונה או לחץ להעלאה</div>
-      </div>
-      <input type="file" id="file-input" accept="image/*">
-
-      <div class="field">
-        <div class="row2">
-          <div style="flex:1"><label>אורך לוח (ס"מ)</label><input type="number" id="slab-w" value="320"></div>
-          <div style="flex:1"><label>רוחב לוח (ס"מ)</label><input type="number" id="slab-h" value="160"></div>
-        </div>
-      </div>
+      <h3>01 — לוחות (פלטות)</h3>
+      <div id="slabs-config"></div>
+      <button class="btn-add-row" onclick="addSlab()">+ הוסף לוח (פלטה נוספת)</button>
 
       <h3 style="margin-top:20px">02 — ייבוא קובץ מדידה (DXF)</h3>
       <div class="dxf-zone" id="dxf-zone">
@@ -219,14 +241,10 @@
       <button class="btn-add-dxf" id="dxf-add-btn" style="display:none" onclick="addDxfToCalc()">+ הוסף למחשבון</button>
 
       <h3 style="margin-top:20px">03 — מחשבון חלקים</h3>
+      <div class="hint">💡 מלא כאן רשימת חלקים, ואז בכל לוח (בצד ימין) יש כפתור "הוסף חלקים מהמחשבון" שמכניס את הרשימה הזו אליו</div>
       <div id="pieces-calc"></div>
       <button class="btn-add-row" onclick="addRow()">+ הוסף שורה</button>
-
-      <button class="btn-main" onclick="generatePieces()">צור חלקים על הלוח</button>
-      <button class="btn-secondary" onclick="arrangeOptimal()">📐 סידור אופטימלי (ניצול לוח)</button>
-      <div class="hint" id="arrange-result" style="display:none"></div>
-      <button class="btn-secondary" onclick="downloadImage()">📥 הורד תמונה</button>
-      <button class="btn-secondary" onclick="clearAll()">🗑️ נקה הכל</button>
+      <button class="btn-secondary" onclick="clearAll()">🗑️ נקה הכל (כל הלוחות)</button>
 
       <h3 style="margin-top:20px">04 — פתח מדויק ביחידה</h3>
       <div class="field">
@@ -258,16 +276,23 @@
         <label>מרחק לנקודת החיבור (ס"מ מהקצה)</label>
         <input type="number" id="conn-split" placeholder="220">
       </div>
+      <div class="field">
+        <div class="row2">
+          <div style="flex:1"><label>לוח לחלק 1</label><select id="conn-slab-1"></select></div>
+          <div style="flex:1"><label>לוח לחלק 2</label><select id="conn-slab-2"></select></div>
+        </div>
+      </div>
       <button class="btn-main" onclick="splitConnectedPieces()">פצל לשני חלקים + מעקב הצמדה</button>
 
-      <div class="hint">💡 גרור חלק כדי להזיז · קרוב לחלק/קצה אחר = הצמדה אוטומטית · 🔄 סבב 90° · ✎ ערוך מידות · 🕳️ בשורה = פתח (כיור/כיריים) · 🔗 שני חלקים מפוצלים — גרור אחד לקצה השני וקבל "מחובר" כשהם נוגעים בקצה תואם</div>
+      <div class="hint">💡 גרור חלק כדי להזיז · קרוב לחלק/קצה אחר = הצמדה אוטומטית · 🔄 סבב 90° · ✎ ערוך מידות · 🕳️ בשורה = פתח (כיור/כיריים) · 🔗 שני חלקים מפוצלים — אם הם על אותו לוח, גרור אחד לקצה השני וקבל "מחובר"; אם הם על לוחות שונים, התג מופיע אוטומטית על שניהם</div>
     </div>
 
-    <!-- RIGHT — STAGE -->
+    <!-- RIGHT — STAGES -->
     <div class="stage-wrap" id="stage-wrap">
-      <div class="stage-placeholder" id="placeholder">העלה תמונה כדי להתחיל</div>
-      <div id="stage" style="display:none">
-        <img id="slab-img">
+      <div id="stages-container"></div>
+      <div class="waiting-zone" id="waiting-zone" style="display:none">
+        <div class="waiting-zone-label">⏳ ממתינים לשיבוץ (לא נכנסו ללוח שנבחר — נדרש לוח נוסף)</div>
+        <div id="waiting-stage" class="waiting-stage"></div>
       </div>
     </div>
 
@@ -275,9 +300,10 @@
 </div>
 
 <script>
-let slabImg = null;
+let slabs = []; // {id, name, slabW, slabH, img, lastSlabW}
+let slabIdCounter = 0;
 let rowCount = 0;
-let pieces = []; // {id, el, w, h, x, y, rotated, color, label, isCutout}
+let pieces = []; // {id, el, w, h, x, y, rotated, color, label, isCutout, connId, slabId}
 let pieceIdCounter = 0;
 let dxfUnit = 'mm';
 let dxfShapes = [];
@@ -321,68 +347,161 @@ function removeRow(n) {
 // init with 4 default rows
 for (let i = 0; i < 4; i++) addRow();
 
-// ── SLAB IMAGE UPLOAD ──────────────────────────────────────────────────────
-const uploadZone = document.getElementById('upload-zone');
-const fileInput = document.getElementById('file-input');
-uploadZone.addEventListener('click', () => fileInput.click());
-uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
-uploadZone.addEventListener('drop', e => {
-  e.preventDefault(); uploadZone.classList.remove('drag');
-  if (e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]);
-});
-fileInput.addEventListener('change', e => { if (e.target.files[0]) loadImage(e.target.files[0]); });
+// ── SLABS (לוחות) — תמיכה במספר פלטות, כולל Book Match ──────────────────
+function addSlab() {
+  slabIdCounter++;
+  const id = 'slab' + slabIdCounter;
+  const name = String.fromCharCode(64 + slabIdCounter); // A, B, C...
+  const slab = { id, name, slabW: 320, slabH: 160, img: null, lastSlabW: null };
+  slabs.push(slab);
+  renderSlabConfig(slab);
+  renderSlabStage(slab);
+  refreshSlabSelects();
+  return slab;
+}
 
-function loadImage(file) {
+function renderSlabConfig(slab) {
+  const isFirst = slabs.length === 1;
+  const card = document.createElement('div');
+  card.className = 'slab-card';
+  card.id = 'slab-config-' + slab.id;
+  card.innerHTML = `
+    <h4>לוח ${slab.name}</h4>
+    ${isFirst ? '' : `
+      <div class="bookmatch-row">
+        <input type="checkbox" id="bookmatch-${slab.id}" onchange="onBookMatchToggle('${slab.id}')">
+        <label for="bookmatch-${slab.id}">Book Match — מראה הפוכה של הלוח הקודם</label>
+      </div>
+    `}
+    <div class="upload-zone" id="upload-zone-${slab.id}">
+      <div class="icon">📷</div>
+      <div class="txt">גרור תמונה או לחץ להעלאה</div>
+    </div>
+    <input type="file" id="file-input-${slab.id}" accept="image/*" style="display:none">
+    <div class="field">
+      <div class="row2">
+        <div style="flex:1"><label>אורך לוח (ס"מ)</label><input type="number" id="slab-w-${slab.id}" value="320"></div>
+        <div style="flex:1"><label>רוחב לוח (ס"מ)</label><input type="number" id="slab-h-${slab.id}" value="160"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label>סוג חומר</label>
+      <select id="slab-material-${slab.id}">
+        <option value="quartz">קוורץ</option>
+        <option value="granite">גרניט</option>
+        <option value="porcelain">פורצלן (מסגרת תמיכה -2 ס"מ מכל כיוון)</option>
+      </select>
+    </div>
+  `;
+  document.getElementById('slabs-config').appendChild(card);
+
+  const uploadZone = card.querySelector('#upload-zone-' + slab.id);
+  const fileInput = card.querySelector('#file-input-' + slab.id);
+  uploadZone.addEventListener('click', () => fileInput.click());
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault(); uploadZone.classList.remove('drag');
+    if (e.dataTransfer.files[0]) loadImage(slab, e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) loadImage(slab, e.target.files[0]); });
+  card.querySelector('#slab-w-' + slab.id).addEventListener('input', () => resizeStage(slab));
+  card.querySelector('#slab-h-' + slab.id).addEventListener('input', () => resizeStage(slab));
+}
+
+function renderSlabStage(slab) {
+  const block = document.createElement('div');
+  block.className = 'slab-block';
+  block.id = 'slab-block-' + slab.id;
+  block.innerHTML = `
+    <div class="slab-block-title">לוח ${slab.name}</div>
+    <div class="stage-placeholder" id="placeholder-${slab.id}">העלה תמונה כדי להתחיל</div>
+    <div id="stage-${slab.id}" class="stage" style="display:none">
+      <img id="slab-img-${slab.id}" class="slab-img">
+    </div>
+    <div class="slab-toolbar">
+      <button onclick="generatePieces('${slab.id}')">+ הוסף חלקים מהמחשבון</button>
+      <button onclick="arrangeOptimal('${slab.id}')">📐 סידור אופטימלי</button>
+      <button onclick="downloadImage('${slab.id}')">📥 הורד תמונה</button>
+    </div>
+    <div class="hint" id="arrange-result-${slab.id}" style="display:none"></div>
+  `;
+  document.getElementById('stages-container').appendChild(block);
+}
+
+function loadImage(slab, file) {
   const reader = new FileReader();
   reader.onload = e => {
     const tempImg = new Image();
     tempImg.onload = () => {
-      slabImg = tempImg;
-      uploadZone.querySelector('.txt').textContent = '✓ ' + file.name;
-      setupStage();
+      slab.img = tempImg;
+      slab.lastSlabW = null; // תמונה חדשה — אין סקייל קודם לשמור עליו
+      document.querySelector('#upload-zone-' + slab.id + ' .txt').textContent = '✓ ' + file.name;
+      document.getElementById('placeholder-' + slab.id).style.display = 'none';
+      document.getElementById('stage-' + slab.id).style.display = 'block';
+      document.getElementById('slab-img-' + slab.id).src = tempImg.src;
+      resizeStage(slab);
+      refreshSlabSelects();
     };
     tempImg.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
 
-let lastSlabW = null;
-
-function setupStage() {
-  document.getElementById('placeholder').style.display = 'none';
-  const stage = document.getElementById('stage');
-  stage.style.display = 'block';
-
-  const slabImgEl = document.getElementById('slab-img');
-  slabImgEl.src = slabImg.src;
-
-  lastSlabW = null; // תמונה חדשה — אין סקייל קודם לשמור עליו
-  resizeStage();
+function onBookMatchToggle(slabId) {
+  if (!document.getElementById('bookmatch-' + slabId).checked) return;
+  const slab = slabs.find(s => s.id === slabId);
+  const idx = slabs.findIndex(s => s.id === slabId);
+  const prev = slabs[idx - 1];
+  if (!prev || !prev.img) {
+    alert('צריך להעלות קודם תמונה ללוח ' + (prev ? prev.name : '') + ' כדי ליצור ממנו מראה הפוכה');
+    document.getElementById('bookmatch-' + slabId).checked = false;
+    return;
+  }
+  // יוצרים מראה הפוכה (flip אופקי) של תמונת הלוח הקודם — קירוב חזותי ל-Book Match כשאין תמונה אמיתית לפלטה השנייה
+  const canvas = document.createElement('canvas');
+  canvas.width = prev.img.width; canvas.height = prev.img.height;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+  ctx.drawImage(prev.img, 0, 0);
+  const flipped = new Image();
+  flipped.onload = () => {
+    slab.img = flipped;
+    slab.lastSlabW = null;
+    document.getElementById('slab-w-' + slab.id).value = document.getElementById('slab-w-' + prev.id).value;
+    document.getElementById('slab-h-' + slab.id).value = document.getElementById('slab-h-' + prev.id).value;
+    document.querySelector('#upload-zone-' + slab.id + ' .txt').textContent = '✓ מראה הפוכה של לוח ' + prev.name;
+    document.getElementById('placeholder-' + slab.id).style.display = 'none';
+    document.getElementById('stage-' + slab.id).style.display = 'block';
+    document.getElementById('slab-img-' + slab.id).src = flipped.src;
+    resizeStage(slab);
+    refreshSlabSelects();
+  };
+  flipped.src = canvas.toDataURL();
 }
 
 // קוראים לזה גם כשמשנים את מידות הלוח בשדות הקלט, אחרי שהתמונה כבר הועלתה —
 // כך שגודל הקנבס בפועל יתאים תמיד לערכים שמוצגים בשדות, והחלקים הקיימים מתכווצים/מתרחבים יחד איתו
-function resizeStage() {
-  if (!slabImg) return;
-  const slabW = parseFloat(document.getElementById('slab-w').value);
-  const slabH = parseFloat(document.getElementById('slab-h').value);
+function resizeStage(slab) {
+  if (!slab.img) return;
+  const slabW = parseFloat(document.getElementById('slab-w-' + slab.id).value);
+  const slabH = parseFloat(document.getElementById('slab-h-' + slab.id).value);
   if (!slabW || !slabH) return;
 
   const containerW = 800;
   const containerH = containerW * (slabH / slabW);
 
-  const stage = document.getElementById('stage');
+  const stage = document.getElementById('stage-' + slab.id);
   stage.style.width = containerW + 'px';
   stage.style.height = containerH + 'px';
 
-  const slabImgEl = document.getElementById('slab-img');
+  const slabImgEl = document.getElementById('slab-img-' + slab.id);
   slabImgEl.style.width = containerW + 'px';
   slabImgEl.style.height = containerH + 'px';
 
-  const ratio = lastSlabW ? lastSlabW / slabW : 1;
+  const ratio = slab.lastSlabW ? slab.lastSlabW / slabW : 1;
   if (ratio !== 1) {
-    pieces.forEach(p => {
+    pieces.filter(p => p.slabId === slab.id).forEach(p => {
       const left = parseFloat(p.el.style.left) * ratio;
       const top = parseFloat(p.el.style.top) * ratio;
       const w = parseFloat(p.el.style.width) * ratio;
@@ -391,18 +510,28 @@ function resizeStage() {
       p.el.style.width = w + 'px'; p.el.style.height = h + 'px';
       p.x = left; p.y = top;
     });
-    pieces.forEach(p => { if (p.connId) updateConnectionVisual(p); });
+    pieces.filter(p => p.slabId === slab.id && p.connId).forEach(updateConnectionVisual);
   }
-  lastSlabW = slabW;
+  slab.slabW = slabW; slab.slabH = slabH; slab.lastSlabW = slabW;
 }
 
-document.getElementById('slab-w').addEventListener('input', resizeStage);
-document.getElementById('slab-h').addEventListener('input', resizeStage);
-
-function pxPerCm() {
-  const slabW = parseFloat(document.getElementById('slab-w').value);
-  return 800 / slabW;
+function pxPerCm(slabId) {
+  const input = document.getElementById('slab-w-' + slabId);
+  return input ? 800 / parseFloat(input.value) : 1;
 }
+
+function refreshSlabSelects() {
+  const opts = slabs.map(s => `<option value="${s.id}">לוח ${s.name}</option>`).join('');
+  ['conn-slab-1', 'conn-slab-2'].forEach(id => {
+    const sel = document.getElementById(id);
+    const prevVal = sel.value;
+    sel.innerHTML = opts;
+    if (prevVal && slabs.some(s => s.id === prevVal)) sel.value = prevVal;
+  });
+  if (slabs.length > 1) document.getElementById('conn-slab-2').value = slabs[slabs.length - 1].id;
+}
+
+addSlab(); // לוח ראשון (A) קיים מההתחלה
 
 // ── DXF UPLOAD & PARSE ───────────────────────────────────────────────────
 const dxfZone = document.getElementById('dxf-zone');
@@ -589,8 +718,9 @@ function addDxfToCalc() {
 }
 
 // ── GENERATE PIECES FROM CALCULATOR ───────────────────────────────────────
-function generatePieces() {
-  if (!slabImg) { alert('העלה תמונת לוח קודם 📷'); return; }
+function generatePieces(slabId) {
+  const slab = slabs.find(s => s.id === slabId);
+  if (!slab || !slab.img) { alert('העלה תמונת לוח קודם 📷'); return; }
 
   const rows = document.querySelectorAll('.piece-row');
   let stackOffset = 0;
@@ -605,14 +735,14 @@ function generatePieces() {
     if (!w || !h) return;
 
     for (let i = 0; i < qty; i++) {
-      createPiece(w, h, color, 20 + stackOffset, 20 + stackOffset, isCutout);
+      createPiece(w, h, color, 20 + stackOffset, 20 + stackOffset, isCutout, slabId);
       stackOffset += 18;
     }
   });
 }
 
-function createPiece(wCm, hCm, color, x, y, isCutout, connId, connLabel) {
-  const scale = pxPerCm();
+function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel) {
+  const scale = pxPerCm(slabId);
   const id = pieceIdCounter++;
   const wPx = wCm * scale, hPx = hCm * scale;
 
@@ -633,17 +763,23 @@ function createPiece(wCm, hCm, color, x, y, isCutout, connId, connLabel) {
     <span class="piece-label">${label}</span>
   `;
 
-  document.getElementById('stage').appendChild(el);
+  document.getElementById('stage-' + slabId).appendChild(el);
 
-  const piece = { id, el, w: wCm, h: hCm, x, y, rotated: false, color, label, isCutout: !!isCutout, connId: connId || null };
+  const piece = { id, el, w: wCm, h: hCm, x, y, rotated: false, color, label, isCutout: !!isCutout, connId: connId || null, slabId };
   pieces.push(piece);
 
   makeDraggable(el, piece);
 
   el.querySelector('.rotate-btn').addEventListener('click', e => {
     e.stopPropagation();
-    piece.rotated = !piece.rotated;
-    el.style.transform = piece.rotated ? 'rotate(90deg)' : 'none';
+    // מחליפים בפועל רוחב/גובה (לא רק CSS transform חזותי) — אחרת תיבת המידות בפועל
+    // לא תואמת למה שנראה על המסך, וזה גורם לחישובי "נכנס/לא נכנס ללוח" שגויים
+    const tmp = piece.w; piece.w = piece.h; piece.h = tmp;
+    const scale = pxPerCm(piece.slabId);
+    el.style.width = (piece.w * scale) + 'px';
+    el.style.height = (piece.h * scale) + 'px';
+    piece.label = (piece.isCutout ? '🕳️ ' : '') + piece.w + '×' + piece.h + (piece.label.match(/\(\d\/\d\)/) ? ' ' + piece.label.match(/\(\d\/\d\)/)[0] : '');
+    el.querySelector('.piece-label').textContent = piece.label;
     updateConnectionVisual(piece);
   });
 
@@ -667,18 +803,25 @@ function createPiece(wCm, hCm, color, x, y, isCutout, connId, connLabel) {
 
 // ── SEAM CONNECTION (split a piece bigger than the slab into 2 linked parts) ──
 function splitConnectedPieces() {
-  if (!slabImg) { alert('העלה תמונת לוח קודם 📷'); return; }
   const total = parseFloat(document.getElementById('conn-total').value);
   const width = parseFloat(document.getElementById('conn-width').value);
   const split = parseFloat(document.getElementById('conn-split').value);
+  const slabId1 = document.getElementById('conn-slab-1').value;
+  const slabId2 = document.getElementById('conn-slab-2').value;
+  const slab1 = slabs.find(s => s.id === slabId1), slab2 = slabs.find(s => s.id === slabId2);
   if (!total || !width || !split || split <= 0 || split >= total) {
     alert('הזן אורך כולל, רוחב, ומרחק חיבור תקין (גדול מ-0 וקטן מהאורך הכולל)');
     return;
   }
+  if (!slab1 || !slab1.img || !slab2 || !slab2.img) {
+    alert('יש להעלות תמונה לשני הלוחות שנבחרו לשני החלקים');
+    return;
+  }
   const connId = 'conn-' + Date.now();
   const color = COLORS[pieceIdCounter % COLORS.length];
-  createPiece(split, width, color, 20, 20, false, connId, '(1/2)');
-  createPiece(Math.round((total - split) * 10) / 10, width, color, 20, 160 + width, false, connId, '(2/2)');
+  const sameSlab = slab1.id === slab2.id;
+  createPiece(split, width, color, 20, 20, false, slab1.id, connId, '(1/2)');
+  createPiece(Math.round((total - split) * 10) / 10, width, color, 20, sameSlab ? 160 + width : 20, false, slab2.id, connId, '(2/2)');
 }
 
 function getConnPartner(piece) {
@@ -698,7 +841,26 @@ function updateConnectionVisual(piece) {
   if (!piece.connId) return;
   const partner = getConnPartner(piece);
   clearSeamVisual(piece.connId);
+  piece.el.querySelectorAll('.cross-slab-badge').forEach(b => b.remove());
   if (!partner) { piece.el.classList.remove('seam-connected'); return; }
+  partner.el.querySelectorAll('.cross-slab-badge').forEach(b => b.remove());
+
+  const sameCanvas = piece.el.parentElement === partner.el.parentElement;
+  if (!sameCanvas) {
+    // שני הלוחות שונים — אי אפשר לצייר קו תפר פיזי בין שני קנבסים נפרדים, מציגים תג הצמדה על כל חלק
+    piece.el.classList.remove('seam-connected');
+    partner.el.classList.remove('seam-connected');
+    const nameOf = slabId => (slabs.find(s => s.id === slabId) || {}).name || '?';
+    const badgeA = document.createElement('div');
+    badgeA.className = 'cross-slab-badge';
+    badgeA.textContent = '🔗 → לוח ' + nameOf(partner.slabId);
+    piece.el.appendChild(badgeA);
+    const badgeB = document.createElement('div');
+    badgeB.className = 'cross-slab-badge';
+    badgeB.textContent = '🔗 → לוח ' + nameOf(piece.slabId);
+    partner.el.appendChild(badgeB);
+    return;
+  }
 
   const a = piece.el, b = partner.el;
   const aLeft = parseFloat(a.style.left), aTop = parseFloat(a.style.top);
@@ -737,7 +899,7 @@ function updateConnectionVisual(piece) {
   b.classList.toggle('seam-connected', connected);
   if (!connected) return;
 
-  const stage = document.getElementById('stage');
+  const stage = piece.el.parentElement;
   const line = document.createElement('div');
   line.id = 'seam-line-' + piece.connId;
   line.className = 'seam-line';
@@ -755,54 +917,92 @@ function updateConnectionVisual(piece) {
 }
 
 // ── OPTIMAL ARRANGEMENT (shelf packing — minimize slab waste) ────────────
-function arrangeOptimal() {
-  if (!slabImg) { alert('העלה תמונת לוח קודם 📷'); return; }
-  const slabW = parseFloat(document.getElementById('slab-w').value);
-  const slabH = parseFloat(document.getElementById('slab-h').value);
-  const real = pieces.filter(p => !p.isCutout);
-  if (!real.length) { alert('אין חלקים על הלוח לסדר'); return; }
+// פלטות פורצלן דורשות מסגרת תמיכה בהיקף (להורדת לחצים) — שטח הניצול בפועל קטן יותר מהמידה הנקובה
+const MATERIAL_BORDER_CM = { quartz: 0, granite: 0, porcelain: 2 };
+
+function getNetSlabSize(slabId) {
+  const slabW = parseFloat(document.getElementById('slab-w-' + slabId).value);
+  const slabH = parseFloat(document.getElementById('slab-h-' + slabId).value);
+  const materialEl = document.getElementById('slab-material-' + slabId);
+  const border = MATERIAL_BORDER_CM[materialEl ? materialEl.value : 'quartz'] || 0;
+  return { slabW, slabH, border, netW: slabW - 2 * border, netH: slabH - 2 * border };
+}
+
+// אלגוריתם Guillotine Best-Area-Fit — שומר רשימת "מלבנים פנויים" ומפצל אותם בכל מיקום,
+// כך שאפשר לנצל "עמודה" שיורדת לכל גובה הלוח ליד חלק קצר יותר (מה ש-Shelf פשוט לא יודע לעשות)
+function packGuillotine(items, binW, binH, gap) {
+  let freeRects = [{ x: 0, y: 0, w: binW, h: binH }];
+  const placed = [], overflow = [];
+
+  const queue = items.slice().sort((a, b) => (b.w * b.h) - (a.w * a.h));
+  queue.forEach(it => {
+    let bestRect = null, bestRotated = false, bestScore = Infinity;
+    freeRects.forEach(rect => {
+      if (it.w + gap <= rect.w && it.h + gap <= rect.h) {
+        const score = (rect.w - it.w) * (rect.h - it.h);
+        if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = false; }
+      }
+      if (it.h + gap <= rect.w && it.w + gap <= rect.h) {
+        const score = (rect.w - it.h) * (rect.h - it.w);
+        if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = true; }
+      }
+    });
+    if (!bestRect) { overflow.push(it.piece); return; }
+
+    const pw = bestRotated ? it.h : it.w;
+    const ph = bestRotated ? it.w : it.h;
+    const px = bestRect.x, py = bestRect.y;
+    placed.push({ piece: it.piece, x: px, y: py, w: pw, h: ph, rotate: bestRotated });
+
+    freeRects = freeRects.filter(r => r !== bestRect);
+    const footW = pw + gap, footH = ph + gap;
+    const rightW = bestRect.w - footW, bottomH = bestRect.h - footH;
+    // מפצלים את שארית המלבן לשני מלבנים לא-חופפים (Guillotine) — בוחרים את הציר שמשאיר את המלבן הגדול יותר שלם
+    if (rightW > 0 && bottomH > 0) {
+      if (rightW >= bottomH) {
+        freeRects.push({ x: px + footW, y: py, w: rightW, h: bestRect.h });
+        freeRects.push({ x: px, y: py + footH, w: footW, h: bottomH });
+      } else {
+        freeRects.push({ x: px + footW, y: py, w: rightW, h: footH });
+        freeRects.push({ x: px, y: py + footH, w: bestRect.w, h: bottomH });
+      }
+    } else if (rightW > 0) {
+      freeRects.push({ x: px + footW, y: py, w: rightW, h: bestRect.h });
+    } else if (bottomH > 0) {
+      freeRects.push({ x: px, y: py + footH, w: bestRect.w, h: bottomH });
+    }
+    // מסירים מלבנים פנויים שכלולים לגמרי בתוך מלבן פנוי אחר (מייעל את החיפוש בסיבוב הבא)
+    freeRects = freeRects.filter((r, i) => !freeRects.some((r2, j) => i !== j &&
+      r.x >= r2.x && r.y >= r2.y && r.x + r.w <= r2.x + r2.w && r.y + r.h <= r2.y + r2.h));
+  });
+
+  return { placed, overflow };
+}
+
+function arrangeOptimal(slabId) {
+  const slab = slabs.find(s => s.id === slabId);
+  if (!slab || !slab.img) { alert('העלה תמונת לוח קודם 📷'); return; }
+  const { slabW, slabH, border, netW, netH } = getNetSlabSize(slabId);
+  const real = pieces.filter(p => !p.isCutout && p.slabId === slabId);
+  if (!real.length) { alert('אין חלקים על לוח זה לסדר'); return; }
 
   const GAP_CM = 3; // מרווח חיתוך (קרף מסור) בין חלקים
+  const items = real.map(p => ({ piece: p, w: p.w, h: p.h }));
 
-  // לכל חלק: בוחרים כיוון (מקור/מסובב) שמתאים לשני ממדי הלוח
-  const items = real.map(p => {
-    let w = p.w, h = p.h, rotate = false;
-    const fitsOriginal = w <= slabW - 2 * GAP_CM && h <= slabH - 2 * GAP_CM;
-    const fitsRotated = h <= slabW - 2 * GAP_CM && w <= slabH - 2 * GAP_CM;
-    if (!fitsOriginal && fitsRotated) {
-      [w, h] = [h, w]; rotate = true;
-    } else if (fitsOriginal && fitsRotated && h > w) {
-      [w, h] = [h, w]; rotate = true; // מעדיפים אוריינטציה עם גובה קטן יותר — יותר מקום לשורות
-    }
-    return { piece: p, w, h, rotate };
-  });
+  const { placed, overflow } = packGuillotine(items, netW, netH, GAP_CM);
 
-  // Shelf algorithm (NFDH): מסדרים לפי גובה יורד, ממלאים שורות לרוחב הלוח
-  items.sort((a, b) => b.h - a.h);
-
-  let x = GAP_CM, y = GAP_CM, rowH = 0;
-  const placed = [], overflow = [];
-  items.forEach(it => {
-    if (it.w > slabW - 2 * GAP_CM) { overflow.push(it.piece); return; }
-    if (x + it.w > slabW - GAP_CM) { x = GAP_CM; y += rowH + GAP_CM; rowH = 0; }
-    if (y + it.h > slabH - GAP_CM) { overflow.push(it.piece); return; }
-    placed.push({ piece: it.piece, x, y, rotate: it.rotate, w: it.w, h: it.h });
-    x += it.w + GAP_CM;
-    rowH = Math.max(rowH, it.h);
-  });
-
-  const scale = pxPerCm();
+  const scale = pxPerCm(slabId);
   let usedArea = 0;
   placed.forEach(pl => {
     const p = pl.piece;
-    if (pl.rotate) { p.w = pl.w; p.h = pl.h; }
+    if (pl.rotate) { const t = p.w; p.w = p.h; p.h = t; }
     p.rotated = false;
     p.el.style.transform = 'none';
     p.el.style.width = (p.w * scale) + 'px';
     p.el.style.height = (p.h * scale) + 'px';
-    p.el.style.left = (pl.x * scale) + 'px';
-    p.el.style.top = (pl.y * scale) + 'px';
-    p.x = pl.x * scale; p.y = pl.y * scale;
+    p.el.style.left = ((pl.x + border) * scale) + 'px';
+    p.el.style.top = ((pl.y + border) * scale) + 'px';
+    p.x = (pl.x + border) * scale; p.y = (pl.y + border) * scale;
     const connTag = (p.label.match(/\(\d\/\d\)/) || [''])[0];
     p.label = p.w + '×' + p.h + (connTag ? ' ' + connTag : '');
     p.el.querySelector('.piece-label').textContent = p.label;
@@ -810,11 +1010,35 @@ function arrangeOptimal() {
     if (p.connId) updateConnectionVisual(p);
   });
 
-  const utilization = Math.round((usedArea / (slabW * slabH)) * 1000) / 10;
-  const result = document.getElementById('arrange-result');
+  moveOverflowToWaiting(overflow);
+
+  const utilization = Math.round((usedArea / (netW * netH)) * 1000) / 10;
+  const result = document.getElementById('arrange-result-' + slabId);
   result.style.display = 'block';
   result.innerHTML = `✅ מוקמו ${placed.length} חלקים · ניצול לוח: <b>${utilization}%</b>` +
-    (overflow.length ? `<br>⚠️ ${overflow.length} חלקים לא נכנסו ללוח: ${overflow.map(p => p.w + '×' + p.h).join(', ')} — נדרשת פלטה נוספת` : '');
+    (overflow.length ? `<br>⚠️ ${overflow.length} חלקים הועברו ל"ממתינים לשיבוץ" (לא נכנסו ללוח ${slab.name}) — שבץ אותם בלוח אחר` : '');
+}
+
+function moveOverflowToWaiting(list) {
+  if (!list.length) return;
+  const zone = document.getElementById('waiting-zone');
+  const waitStage = document.getElementById('waiting-stage');
+  zone.style.display = 'block';
+  let x = parseFloat(waitStage.style.width) || 10;
+  if (!waitStage.style.width) x = 10;
+  list.forEach(p => {
+    p.slabId = null;
+    p.el.remove();
+    waitStage.appendChild(p.el);
+    p.el.style.left = x + 'px';
+    p.el.style.top = '10px';
+    p.el.style.transform = 'none';
+    p.rotated = false;
+    x += parseFloat(p.el.style.width) + 30;
+    if (p.connId) updateConnectionVisual(p);
+  });
+  waitStage.style.width = x + 'px';
+  waitStage.style.height = '140px';
 }
 
 // ── UNIT SELECT (for relative cutout placement) ───────────────────────────
@@ -859,7 +1083,7 @@ function addCutoutToUnit() {
   const distLeft = parseFloat(document.getElementById('cut-dist-left').value);
   if (isNaN(distLeft)) { alert('הזן מרחק משמאל (או מימין)'); return; }
 
-  const scale = pxPerCm();
+  const scale = pxPerCm(unit.slabId);
   const unitLeft = parseFloat(unit.el.style.left);
   const unitTop = parseFloat(unit.el.style.top);
   const unitWpx = parseFloat(unit.el.style.width);
@@ -872,7 +1096,7 @@ function addCutoutToUnit() {
   const centerYpx = unitTop + unitHpx / 2;
   const cutWpx = sinkW * scale, cutHpx = sinkH * scale;
 
-  createPiece(sinkW, sinkH, '#ffffff', centerXpx - cutWpx/2, centerYpx - cutHpx/2, true);
+  createPiece(sinkW, sinkH, '#ffffff', centerXpx - cutWpx/2, centerYpx - cutHpx/2, true, unit.slabId);
 }
 
 // ── EDIT EXISTING PIECE ────────────────────────────────────────────────────
@@ -895,7 +1119,7 @@ function openEditPopover(piece) {
     const newW = parseFloat(document.getElementById('edit-w-' + piece.id).value);
     const newH = parseFloat(document.getElementById('edit-h-' + piece.id).value);
     if (newW > 0 && newH > 0) {
-      const scale = pxPerCm();
+      const scale = pxPerCm(piece.slabId);
       piece.w = newW; piece.h = newH;
       piece.label = (piece.isCutout ? '🕳️ ' : '') + newW + '×' + newH;
       piece.el.style.width = (newW * scale) + 'px';
@@ -913,14 +1137,14 @@ function openEditPopover(piece) {
 const SNAP_THRESHOLD = 10; // px
 
 function getSnapped(piece, newLeft, newTop, wPx, hPx) {
-  const stage = document.getElementById('stage');
-  const stageW = parseFloat(stage.style.width), stageH = parseFloat(stage.style.height);
+  const stage = piece.el.parentElement;
+  const stageW = parseFloat(stage.style.width) || 0, stageH = parseFloat(stage.style.height) || 0;
   const right = newLeft + wPx, bottom = newTop + hPx;
 
   let xTargets = [0, stageW];
   let yTargets = [0, stageH];
   pieces.forEach(p => {
-    if (p.id === piece.id) return;
+    if (p.id === piece.id || p.el.parentElement !== stage) return;
     const pLeft = parseFloat(p.el.style.left), pTop = parseFloat(p.el.style.top);
     const pW = parseFloat(p.el.style.width), pH = parseFloat(p.el.style.height);
     xTargets.push(pLeft, pLeft + pW);
@@ -990,22 +1214,26 @@ function makeDraggable(el, piece) {
 function clearAll() {
   pieces.forEach(p => { clearSeamVisual(p.connId); p.el.remove(); });
   pieces = [];
+  document.getElementById('waiting-zone').style.display = 'none';
+  document.getElementById('waiting-stage').innerHTML = '';
+  document.getElementById('waiting-stage').style.width = '';
   refreshUnitSelect();
 }
 
 // ── DOWNLOAD AS IMAGE ────────────────────────────────────────────────────
-function downloadImage() {
-  if (!slabImg) { alert('אין תמונה'); return; }
-  const stage = document.getElementById('stage');
+function downloadImage(slabId) {
+  const slab = slabs.find(s => s.id === slabId);
+  if (!slab || !slab.img) { alert('אין תמונה בלוח הזה'); return; }
+  const stage = document.getElementById('stage-' + slabId);
   const w = parseFloat(stage.style.width);
   const h = parseFloat(stage.style.height);
 
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(slabImg, 0, 0, w, h);
+  ctx.drawImage(slab.img, 0, 0, w, h);
 
-  pieces.forEach(p => {
+  pieces.filter(p => p.slabId === slabId).forEach(p => {
     const wPx = parseFloat(p.el.style.width), hPx = parseFloat(p.el.style.height);
     const x = parseFloat(p.el.style.left), y = parseFloat(p.el.style.top);
     const cx = x + wPx/2, cy = y + hPx/2;
@@ -1037,7 +1265,7 @@ function downloadImage() {
   });
 
   const link = document.createElement('a');
-  link.download = 'slab-arrangement.png';
+  link.download = 'slab-' + slab.name + '-arrangement.png';
   link.href = canvas.toDataURL('image/png');
   link.click();
 }
