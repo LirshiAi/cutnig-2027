@@ -72,11 +72,11 @@
   }
   .btn-main:hover { opacity:.9; }
   .btn-secondary {
-    width:100%; background:transparent; border:1px solid #2a2a2a; color:#888;
-    border-radius:10px; padding:10px; font-size:13px; cursor:pointer; margin-top:8px;
+    width:100%; background:rgba(212,175,55,0.12); border:1.5px solid #D4AF37; color:#D4AF37;
+    border-radius:10px; padding:10px; font-size:13px; font-weight:700; cursor:pointer; margin-top:8px;
     font-family:inherit;
   }
-  .btn-secondary:hover { border-color:#FF5C2E; color:#FF5C2E; }
+  .btn-secondary:hover { background:rgba(212,175,55,0.22); }
 
   .hint {
     background:#0f0800; border:1px solid #2a1500; border-radius:10px;
@@ -115,6 +115,8 @@
     content:''; position:absolute; top:-6px; left:50%; width:1px; height:6px; background:#888;
   }
   .piece.snapping { border-width:2px !important; }
+  .piece.pick-selected { outline:3px solid #FFD93D; outline-offset:2px; }
+  #pick-mode-btn.active, #seam-pick-btn.active { border-color:#FFD93D; color:#FFD93D; background:rgba(255,217,61,0.18); }
   .snap-guide {
     position:absolute; background:#FF5C2E; z-index:15; pointer-events:none;
   }
@@ -284,6 +286,25 @@
       </div>
       <button class="btn-main" onclick="splitConnectedPieces()">פצל לשני חלקים + מעקב הצמדה</button>
 
+      <h3 style="margin-top:20px">06 — Book Match לזוג חלקים נבחר</h3>
+      <div class="hint">💡 בוחרים שני חלקים קונקרטיים (אפילו משני לוחות שונים) ומקבלים תצוגה/הורדה של איך התפר בין שניהם יראה במראה הפוכה</div>
+      <button class="btn-secondary" id="pick-mode-btn" onclick="togglePickMode()">👆 בחר חלקים בלחיצה על הלוח</button>
+      <div class="field">
+        <div class="row2">
+          <div style="flex:1"><label>חלק 1</label><select id="bm-piece-1"></select></div>
+          <div style="flex:1"><label>חלק 2</label><select id="bm-piece-2"></select></div>
+        </div>
+      </div>
+      <button class="btn-main" onclick="downloadPieceBookMatch()">🖼️ הורד Book Match — רק שני החלקים שנבחרו למעלה ⬆️</button>
+
+      <h3 style="margin-top:20px">07 — חיבור חופשי בנקודת תפר (בלי ליצור חלק קודם)</h3>
+      <div class="hint">💡 מסמנים ישירות על התמונה את הנקודה שבה רוצים שהלוח יתחבר ללוח השני — הכלי שומר את השטח שמשמאל לנקודה בכל לוח, משקף את הלוח השני, ומציג/מוריד את התפר ביניהם</div>
+      <div class="field">
+        <label>רוחב הצגה מכל צד התפר (ס"מ)</label>
+        <input type="number" id="seam-preview-width" value="60">
+      </div>
+      <button class="btn-secondary" id="seam-pick-btn" onclick="toggleSeamPickMode()">📍 סמן 2 נקודות תפר על הלוחות</button>
+
       <div class="hint">💡 גרור חלק כדי להזיז · קרוב לחלק/קצה אחר = הצמדה אוטומטית · 🔄 סבב 90° · ✎ ערוך מידות · 🕳️ בשורה = פתח (כיור/כיריים) · 🔗 שני חלקים מפוצלים — אם הם על אותו לוח, גרור אחד לקצה השני וקבל "מחובר"; אם הם על לוחות שונים, התג מופיע אוטומטית על שניהם</div>
     </div>
 
@@ -392,6 +413,14 @@ function renderSlabConfig(slab) {
         <option value="porcelain">פורצלן (מסגרת תמיכה -2 ס"מ מכל כיוון)</option>
       </select>
     </div>
+    <div class="field">
+      <label>🔧 כיוון תפר Book Match — היסט טקסטורה (ס"מ; חיובי/שלילי)</label>
+      <div class="row2">
+        <div style="flex:1"><input type="number" id="offset-x-${slab.id}" placeholder="היסט אופקי" value="0" oninput="applySlabOffset('${slab.id}')"></div>
+        <div style="flex:1"><input type="number" id="offset-y-${slab.id}" placeholder="היסט אנכי" value="0" oninput="applySlabOffset('${slab.id}')"></div>
+      </div>
+      <div class="hint">💡 מזיז את הטקסטורה בתוך המסגרת (כמו לקצר קצת מהלוח בפועל) כדי ליישר את הגיד עם הלוח השני בתפר — הרצועה שנחשפת בקצה מוצגת כריקה</div>
+    </div>
   `;
   document.getElementById('slabs-config').appendChild(card);
 
@@ -422,11 +451,20 @@ function renderSlabStage(slab) {
     <div class="slab-toolbar">
       <button onclick="generatePieces('${slab.id}')">+ הוסף חלקים מהמחשבון</button>
       <button onclick="arrangeOptimal('${slab.id}')">📐 סידור אופטימלי</button>
+      <button onclick="recropSlab('${slab.id}')">✂️ חיתוך מחדש</button>
       <button onclick="downloadImage('${slab.id}')">📥 הורד תמונה</button>
+      <button onclick="downloadCombinedImage('${slab.id}')">🖼️ הורד Book Match — לוח שלם</button>
+      <button onclick="clearSlabPieces('${slab.id}')">🗑️ נקה חלקים מהלוח הזה</button>
     </div>
     <div class="hint" id="arrange-result-${slab.id}" style="display:none"></div>
   `;
   document.getElementById('stages-container').appendChild(block);
+
+  document.getElementById('stage-' + slab.id).addEventListener('click', e => {
+    if (!seamPickMode || e.target.closest('.piece')) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    onSeamPick(slab.id, e.clientX - rect.left);
+  });
 }
 
 function loadImage(slab, file) {
@@ -434,18 +472,253 @@ function loadImage(slab, file) {
   reader.onload = e => {
     const tempImg = new Image();
     tempImg.onload = () => {
-      slab.img = tempImg;
-      slab.lastSlabW = null; // תמונה חדשה — אין סקייל קודם לשמור עליו
-      document.querySelector('#upload-zone-' + slab.id + ' .txt').textContent = '✓ ' + file.name;
-      document.getElementById('placeholder-' + slab.id).style.display = 'none';
-      document.getElementById('stage-' + slab.id).style.display = 'block';
-      document.getElementById('slab-img-' + slab.id).src = tempImg.src;
-      resizeStage(slab);
-      refreshSlabSelects();
+      slab.originalImg = tempImg; // שומרים את התמונה הגולמית (לפני חיתוך) — מאפשר "חיתוך מחדש" בלי להעלות שוב
+      openCropModal(slab, tempImg, cropped => applySlabImage(slab, cropped, file.name));
     };
     tempImg.src = e.target.result;
   };
   reader.readAsDataURL(file);
+}
+
+// קוראים לזה גם מ-loadImage (העלאה חדשה) וגם מ-recropSlab (חיתוך מחדש) וגם מ-Book Match —
+// כל מקור שמייצר תמונת לוח חדשה (Image) מסתיים כאן כדי שהתצוגה תתעדכן באופן אחיד.
+// isMaster=true מאפס גם את "המאסטר" (התמונה הנקייה בלי היסט) ששדות ההיסט מתחילים ממנה —
+// כשמחילים רק היסט (applySlabOffset) לא רוצים לדרוס את המאסטר עם תוצאה שכבר מוזזת
+function applySlabImage(slab, img, label, isMaster = true) {
+  slab.img = img;
+  if (isMaster) {
+    slab.warpedMaster = img;
+    const ox = document.getElementById('offset-x-' + slab.id), oy = document.getElementById('offset-y-' + slab.id);
+    if (ox) ox.value = 0;
+    if (oy) oy.value = 0;
+  }
+  slab.lastSlabW = null; // תמונה חדשה — אין סקייל קודם לשמור עליו
+  document.querySelector('#upload-zone-' + slab.id + ' .txt').textContent = '✓ ' + label;
+  document.getElementById('placeholder-' + slab.id).style.display = 'none';
+  document.getElementById('stage-' + slab.id).style.display = 'block';
+  document.getElementById('slab-img-' + slab.id).src = img.src;
+  resizeStage(slab);
+  refreshSlabSelects();
+}
+
+function recropSlab(slabId) {
+  const slab = slabs.find(s => s.id === slabId);
+  if (!slab || !slab.originalImg) { alert('אין תמונת מקור לחיתוך מחדש'); return; }
+  openCropModal(slab, slab.originalImg, cropped => applySlabImage(slab, cropped, 'נחתך מחדש'));
+}
+
+// מזיז את הטקסטורה הנקייה (warpedMaster) בתוך המסגרת לפי ס"מ — מדמה "קיצור" קצה הלוח כדי ליישר
+// גיד עם הלוח השני בתפר ב-Book Match. הרצועה שנחשפת בקצה (שאין בה טקסטורה אמיתית) מוצגת ריקה.
+function applySlabOffset(slabId) {
+  const slab = slabs.find(s => s.id === slabId);
+  if (!slab || !slab.warpedMaster) return;
+  const dxCm = parseFloat(document.getElementById('offset-x-' + slabId).value) || 0;
+  const dyCm = parseFloat(document.getElementById('offset-y-' + slabId).value) || 0;
+  const slabW = parseFloat(document.getElementById('slab-w-' + slabId).value);
+  const slabH = parseFloat(document.getElementById('slab-h-' + slabId).value);
+  const master = slab.warpedMaster;
+  if (!slabW || !slabH) return;
+
+  const pxPerCmX = master.naturalWidth / slabW, pxPerCmY = master.naturalHeight / slabH;
+  const dxPx = dxCm * pxPerCmX, dyPx = dyCm * pxPerCmY;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = master.naturalWidth; canvas.height = master.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(master, dxPx, dyPx);
+
+  const shifted = new Image();
+  shifted.onload = () => applySlabImage(slab, shifted, 'הוזז (' + dxCm + ', ' + dyCm + ' ס"מ)', false);
+  shifted.src = canvas.toDataURL();
+}
+
+// ── CROP MODAL — מסירים את הרקע (חצר/קרקע/וכו') מסביב ללוח בתמונה ──
+// מסגרת מלבנית פשוטה לא מספיקה כשהלוח עצמו מצולם בזווית (טרפזי בתמונה, לא מלבן ישר) —
+// אז המשתמש מצמיד 4 נקודות פינה לארבע הפינות האמיתיות של הלוח, והכלי "מיישר" (perspective warp)
+// את הטקסטורה שבתוך הריבוע הזה למלבן מושלם שממלא את כל הקנבס, בלי שום רקע
+let cropState = null;
+const PIN_LABELS = ['↖', '↗', '↘', '↙']; // TL, TR, BR, BL
+
+function ensureCropModal() {
+  if (document.getElementById('crop-modal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'crop-modal';
+  modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center; flex-direction:column; gap:14px;';
+  modal.innerHTML = `
+    <div style="color:#fff; font-size:14px; max-width:80vw; text-align:center;">גרור את 4 הפינות הכתומות בדיוק לארבע הפינות האמיתיות של הלוח בתמונה — הכלי יישר את הטקסטורה שבפנים למלבן נקי, בלי הרקע מסביב</div>
+    <div id="crop-stage" style="position:relative; display:inline-block; line-height:0;">
+      <img id="crop-img" style="display:block; max-width:80vw; max-height:65vh; user-select:none; pointer-events:none;">
+      <svg id="crop-quad-svg" style="position:absolute; top:0; left:0; pointer-events:none;">
+        <polygon id="crop-quad-poly" style="fill:rgba(255,92,46,0.15); stroke:#FF5C2E; stroke-width:2;"></polygon>
+      </svg>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button id="crop-confirm-btn" style="background:#FF5C2E; border:none; border-radius:10px; color:#fff; padding:10px 22px; font-size:14px; cursor:pointer;">✓ אישור וייישור</button>
+      <button id="crop-skip-btn" style="background:transparent; border:1px solid #4ECDC4; border-radius:10px; color:#4ECDC4; padding:10px 22px; font-size:14px; cursor:pointer;">⏩ התמונה כבר נקייה — טען כמו שהיא</button>
+      <button id="crop-cancel-btn" style="background:transparent; border:1px solid #444; border-radius:10px; color:#aaa; padding:10px 22px; font-size:14px; cursor:pointer;">ביטול</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  for (let i = 0; i < 4; i++) {
+    const pin = document.createElement('div');
+    pin.className = 'crop-pin';
+    pin.dataset.i = i;
+    pin.textContent = PIN_LABELS[i];
+    pin.style.cssText = 'position:absolute; width:22px; height:22px; margin-left:-11px; margin-top:-11px; background:#FF5C2E; color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; cursor:grab; box-shadow:0 0 0 2px #fff;';
+    pin.addEventListener('mousedown', e => { e.preventDefault(); startPinDrag(e, i); });
+    document.getElementById('crop-stage').appendChild(pin);
+  }
+
+  modal.querySelector('#crop-confirm-btn').addEventListener('click', confirmCrop);
+  modal.querySelector('#crop-skip-btn').addEventListener('click', skipCrop);
+  modal.querySelector('#crop-cancel-btn').addEventListener('click', cancelCrop);
+}
+
+function openCropModal(slab, img, onDone) {
+  ensureCropModal();
+  cropState = { slab, img, onDone };
+  const modal = document.getElementById('crop-modal');
+  const imgEl = document.getElementById('crop-img');
+  imgEl.onload = initCropPins;
+  imgEl.src = img.src;
+  modal.style.display = 'flex';
+  if (imgEl.complete && imgEl.naturalWidth) initCropPins();
+}
+
+function initCropPins() {
+  const imgEl = document.getElementById('crop-img');
+  const rect = imgEl.getBoundingClientRect();
+  cropState.dispW = rect.width; cropState.dispH = rect.height;
+  document.getElementById('crop-quad-svg').setAttribute('width', rect.width);
+  document.getElementById('crop-quad-svg').setAttribute('height', rect.height);
+  // נקודות פתיחה — מעט בפנים מהשוליים (ברירת מחדל; המשתמש מצמיד לפינות האמיתיות של הלוח)
+  const mx = rect.width * 0.06, my = rect.height * 0.06;
+  cropState.points = [
+    { x: mx, y: my },                        // TL
+    { x: rect.width - mx, y: my },            // TR
+    { x: rect.width - mx, y: rect.height - my }, // BR
+    { x: mx, y: rect.height - my }            // BL
+  ];
+  renderCropPins();
+}
+
+function renderCropPins() {
+  const { points } = cropState;
+  document.querySelectorAll('.crop-pin').forEach((pin, i) => {
+    pin.style.left = points[i].x + 'px';
+    pin.style.top = points[i].y + 'px';
+  });
+  document.getElementById('crop-quad-poly').setAttribute('points', points.map(p => `${p.x},${p.y}`).join(' '));
+}
+
+function startPinDrag(e, i) {
+  const dispW = cropState.dispW, dispH = cropState.dispH;
+  function move(ev) {
+    const stageRect = document.getElementById('crop-stage').getBoundingClientRect();
+    const x = Math.max(0, Math.min(ev.clientX - stageRect.left, dispW));
+    const y = Math.max(0, Math.min(ev.clientY - stageRect.top, dispH));
+    cropState.points[i] = { x, y };
+    renderCropPins();
+  }
+  function stop() {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', stop);
+  }
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', stop);
+}
+
+// ── PERSPECTIVE WARP — ממפים מרובע כללי (4 נקודות) למלבן מושלם, ע"י חלוקה לרשת של משולשים קטנים
+// וטרנספורמציה אפינית לכל משולש (קירוב מצוין ל-perspective warp בלי WebGL)
+function bilerpQuad(c, u, v) {
+  const top = { x: c[0].x + (c[1].x - c[0].x) * u, y: c[0].y + (c[1].y - c[0].y) * u };
+  const bottom = { x: c[3].x + (c[2].x - c[3].x) * u, y: c[3].y + (c[2].y - c[3].y) * u };
+  return { x: top.x + (bottom.x - top.x) * v, y: top.y + (bottom.y - top.y) * v };
+}
+
+function solveAffine(srcTri, dstTri) {
+  const [s0, s1, s2] = srcTri, [d0, d1, d2] = dstTri;
+  const x0 = s0.x, y0 = s0.y, x1 = s1.x, y1 = s1.y, x2 = s2.x, y2 = s2.y;
+  const det = x0 * (y1 - y2) - y0 * (x1 - x2) + (x1 * y2 - x2 * y1);
+  if (Math.abs(det) < 1e-9) return null;
+  const solveFor = (D0, D1, D2) => [
+    (D0 * (y1 - y2) - y0 * (D1 - D2) + (D1 * y2 - D2 * y1)) / det,
+    (x0 * (D1 - D2) - D0 * (x1 - x2) + (x1 * D2 - x2 * D1)) / det,
+    (x0 * (y1 * D2 - y2 * D1) - y0 * (x1 * D2 - x2 * D1) + D0 * (x1 * y2 - x2 * y1)) / det
+  ];
+  const [a, c, e] = solveFor(d0.x, d1.x, d2.x);
+  const [b, d, f] = solveFor(d0.y, d1.y, d2.y);
+  return [a, b, c, d, e, f];
+}
+
+function drawTexturedTriangle(ctx, image, srcTri, dstTri) {
+  const m = solveAffine(srcTri, dstTri);
+  if (!m) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(dstTri[0].x, dstTri[0].y);
+  ctx.lineTo(dstTri[1].x, dstTri[1].y);
+  ctx.lineTo(dstTri[2].x, dstTri[2].y);
+  ctx.closePath();
+  ctx.clip();
+  ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+  ctx.drawImage(image, 0, 0);
+  ctx.restore();
+}
+
+function warpQuadToRect(image, srcCorners, destW, destH, gridN) {
+  const canvas = document.createElement('canvas');
+  canvas.width = destW; canvas.height = destH;
+  const ctx = canvas.getContext('2d');
+  const N = gridN || 16;
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const u0 = i / N, u1 = (i + 1) / N, v0 = j / N, v1 = (j + 1) / N;
+      const sTL = bilerpQuad(srcCorners, u0, v0), sTR = bilerpQuad(srcCorners, u1, v0);
+      const sBR = bilerpQuad(srcCorners, u1, v1), sBL = bilerpQuad(srcCorners, u0, v1);
+      const dTL = { x: u0 * destW, y: v0 * destH }, dTR = { x: u1 * destW, y: v0 * destH };
+      const dBR = { x: u1 * destW, y: v1 * destH }, dBL = { x: u0 * destW, y: v1 * destH };
+      drawTexturedTriangle(ctx, image, [sTL, sTR, sBR], [dTL, dTR, dBR]);
+      drawTexturedTriangle(ctx, image, [sTL, sBR, sBL], [dTL, dBR, dBL]);
+    }
+  }
+  return canvas;
+}
+
+function confirmCrop() {
+  const { slab, img, onDone, points, dispW, dispH } = cropState;
+  const scaleX = img.naturalWidth / dispW, scaleY = img.naturalHeight / dispH;
+  const srcCorners = points.map(p => ({ x: p.x * scaleX, y: p.y * scaleY }));
+
+  const slabW = parseFloat(document.getElementById('slab-w-' + slab.id).value) || 320;
+  const slabH = parseFloat(document.getElementById('slab-h-' + slab.id).value) || 160;
+  const destW = 1400, destH = Math.round(1400 * (slabH / slabW));
+
+  const canvas = warpQuadToRect(img, srcCorners, destW, destH);
+  const warped = new Image();
+  warped.onload = () => {
+    document.getElementById('crop-modal').style.display = 'none';
+    cropState = null;
+    onDone(warped);
+  };
+  warped.src = canvas.toDataURL();
+}
+
+// לתמונה שכבר נקייה (הלוח תופס את כל הפריים, בלי רקע) — מדלגים על היישור ופשוט טוענים אותה כמו שהיא,
+// בלי לדרוש מהמשתמש לסמן 4 פינות בכל העלאה
+function skipCrop() {
+  const { onDone, img } = cropState;
+  document.getElementById('crop-modal').style.display = 'none';
+  cropState = null;
+  onDone(img);
+}
+
+function cancelCrop() {
+  document.getElementById('crop-modal').style.display = 'none';
+  cropState = null;
 }
 
 function onBookMatchToggle(slabId) {
@@ -464,18 +737,13 @@ function onBookMatchToggle(slabId) {
   const ctx = canvas.getContext('2d');
   ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
   ctx.drawImage(prev.img, 0, 0);
+  slab.bookMatchOf = prev.id;
   const flipped = new Image();
   flipped.onload = () => {
-    slab.img = flipped;
-    slab.lastSlabW = null;
+    slab.originalImg = flipped;
     document.getElementById('slab-w-' + slab.id).value = document.getElementById('slab-w-' + prev.id).value;
     document.getElementById('slab-h-' + slab.id).value = document.getElementById('slab-h-' + prev.id).value;
-    document.querySelector('#upload-zone-' + slab.id + ' .txt').textContent = '✓ מראה הפוכה של לוח ' + prev.name;
-    document.getElementById('placeholder-' + slab.id).style.display = 'none';
-    document.getElementById('stage-' + slab.id).style.display = 'block';
-    document.getElementById('slab-img-' + slab.id).src = flipped.src;
-    resizeStage(slab);
-    refreshSlabSelects();
+    applySlabImage(slab, flipped, 'מראה הפוכה של לוח ' + prev.name);
   };
   flipped.src = canvas.toDataURL();
 }
@@ -579,7 +847,9 @@ function loadDxf(file) {
 
       dxfShapes = debug.shapes;
       dxfZone.querySelector('.txt').textContent = '✓ ' + file.name + ` (${debug.shapes.length} צורות)`;
-      renderDxfResults();
+      const _maxDim = dxfShapes.length ? Math.max(...dxfShapes.flatMap(s => [s.w, s.h])) : 0;
+      const _autoUnit = _maxDim > 500 ? 'mm' : 'cm';
+      if (_autoUnit !== dxfUnit) setUnit(_autoUnit); else renderDxfResults();
     } catch (err) {
       console.error(err);
       alert('שגיאה בפענוח: ' + err.message + '\n\nשלח לי את הקובץ DXF ואבדוק ביחד מה המבנה שלו.');
@@ -739,6 +1009,9 @@ function generatePieces(slabId) {
       stackOffset += 18;
     }
   });
+
+  // מסדר אוטומטית אחרי הוספה — כך החלקים לא נערמים זה על זה ואפשר לבחור ביניהם מיד
+  arrangeOptimal(slabId);
 }
 
 function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel) {
@@ -769,6 +1042,11 @@ function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel)
   pieces.push(piece);
 
   makeDraggable(el, piece);
+
+  el.addEventListener('click', e => {
+    if (e.target.classList.contains('ctrl-btn')) return;
+    onPieceClick(piece);
+  });
 
   el.querySelector('.rotate-btn').addEventListener('click', e => {
     e.stopPropagation();
@@ -928,68 +1206,63 @@ function getNetSlabSize(slabId) {
   return { slabW, slabH, border, netW: slabW - 2 * border, netH: slabH - 2 * border };
 }
 
-// אלגוריתם Guillotine Best-Area-Fit — שומר רשימת "מלבנים פנויים" ומפצל אותם בכל מיקום,
-// כך שאפשר לנצל "עמודה" שיורדת לכל גובה הלוח ליד חלק קצר יותר (מה ש-Shelf פשוט לא יודע לעשות)
-function packGuillotine(items, binW, binH, gap) {
-  let freeRects = [{ x: 0, y: 0, w: binW, h: binH }];
+// אלגוריתם Shelf/NFDH — ממלאים "מדף" שמשתרע על פני כל האורך (binW) של הלוח, ועוברים למדף הבא
+// (כלפי הגובה, binH) רק כשאין יותר מקום באורך. כך החיתוך העיקרי (בין מדפים) רץ על פני כל האורך —
+// תמיד בכיוון הסיבים של השיש — וחיתוך לרוחב קורה רק בתוך מדף, כשצריך להפריד חלקים זה מזה
+function packShelf(items, binW, binH, gap) {
   const placed = [], overflow = [];
+  const queue = items.slice().sort((a, b) => b.h - a.h);
 
-  const queue = items.slice().sort((a, b) => (b.w * b.h) - (a.w * a.h));
+  let shelfY = 0, shelfH = 0, cursorX = 0, shelfStarted = false;
+
+  function startNewShelf(h) {
+    shelfY += shelfH ? shelfH + gap : 0;
+    shelfH = h;
+    cursorX = 0;
+    shelfStarted = true;
+  }
+
   queue.forEach(it => {
-    let bestRect = null, bestRotated = false, bestScore = Infinity;
-    freeRects.forEach(rect => {
-      if (it.w + gap <= rect.w && it.h + gap <= rect.h) {
-        const score = (rect.w - it.w) * (rect.h - it.h);
-        if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = false; }
-      }
-      if (it.h + gap <= rect.w && it.w + gap <= rect.h) {
-        const score = (rect.w - it.h) * (rect.h - it.w);
-        if (score < bestScore) { bestScore = score; bestRect = rect; bestRotated = true; }
-      }
-    });
-    if (!bestRect) { overflow.push(it.piece); return; }
-
-    const pw = bestRotated ? it.h : it.w;
-    const ph = bestRotated ? it.w : it.h;
-    const px = bestRect.x, py = bestRect.y;
-    placed.push({ piece: it.piece, x: px, y: py, w: pw, h: ph, rotate: bestRotated });
-
-    freeRects = freeRects.filter(r => r !== bestRect);
-    const footW = pw + gap, footH = ph + gap;
-    const rightW = bestRect.w - footW, bottomH = bestRect.h - footH;
-    // מפצלים את שארית המלבן לשני מלבנים לא-חופפים (Guillotine) — בוחרים את הציר שמשאיר את המלבן הגדול יותר שלם
-    if (rightW > 0 && bottomH > 0) {
-      if (rightW >= bottomH) {
-        freeRects.push({ x: px + footW, y: py, w: rightW, h: bestRect.h });
-        freeRects.push({ x: px, y: py + footH, w: footW, h: bottomH });
-      } else {
-        freeRects.push({ x: px + footW, y: py, w: rightW, h: footH });
-        freeRects.push({ x: px, y: py + footH, w: bestRect.w, h: bottomH });
-      }
-    } else if (rightW > 0) {
-      freeRects.push({ x: px + footW, y: py, w: rightW, h: bestRect.h });
-    } else if (bottomH > 0) {
-      freeRects.push({ x: px, y: py + footH, w: bestRect.w, h: bottomH });
+    // מנסים להכניס למדף הנוכחי באוריינטציה המקורית, ואז מסובב, לפני שעוברים למדף חדש
+    if (shelfStarted && cursorX + it.w <= binW && shelfY + it.h <= binH) {
+      placed.push({ piece: it.piece, x: cursorX, y: shelfY, w: it.w, h: it.h, rotate: false });
+      cursorX += it.w + gap;
+      return;
     }
-    // מסירים מלבנים פנויים שכלולים לגמרי בתוך מלבן פנוי אחר (מייעל את החיפוש בסיבוב הבא)
-    freeRects = freeRects.filter((r, i) => !freeRects.some((r2, j) => i !== j &&
-      r.x >= r2.x && r.y >= r2.y && r.x + r.w <= r2.x + r2.w && r.y + r.h <= r2.y + r2.h));
+    if (shelfStarted && cursorX + it.h <= binW && shelfY + it.w <= binH) {
+      placed.push({ piece: it.piece, x: cursorX, y: shelfY, w: it.h, h: it.w, rotate: true });
+      cursorX += it.h + gap;
+      return;
+    }
+    // לא נכנס למדף הנוכחי — פותחים מדף חדש (זה ה"חיתוך לגובה" היחיד שקורה, ורק כשצריך)
+    const nextY = shelfY + (shelfStarted ? shelfH + gap : 0);
+    if (it.w <= binW && nextY + it.h <= binH) {
+      startNewShelf(it.h);
+      placed.push({ piece: it.piece, x: 0, y: shelfY, w: it.w, h: it.h, rotate: false });
+      cursorX = it.w + gap;
+    } else if (it.h <= binW && nextY + it.w <= binH) {
+      startNewShelf(it.w);
+      placed.push({ piece: it.piece, x: 0, y: shelfY, w: it.h, h: it.w, rotate: true });
+      cursorX = it.h + gap;
+    } else {
+      overflow.push(it.piece);
+    }
   });
 
   return { placed, overflow };
 }
 
-function arrangeOptimal(slabId) {
+function arrangeOptimal(slabId, silent = false) {
   const slab = slabs.find(s => s.id === slabId);
-  if (!slab || !slab.img) { alert('העלה תמונת לוח קודם 📷'); return; }
+  if (!slab || !slab.img) { if (!silent) alert('העלה תמונת לוח קודם 📷'); return; }
   const { slabW, slabH, border, netW, netH } = getNetSlabSize(slabId);
   const real = pieces.filter(p => !p.isCutout && p.slabId === slabId);
-  if (!real.length) { alert('אין חלקים על לוח זה לסדר'); return; }
+  if (!real.length) { if (!silent) alert('אין חלקים על לוח זה לסדר'); return; }
 
   const GAP_CM = 3; // מרווח חיתוך (קרף מסור) בין חלקים
   const items = real.map(p => ({ piece: p, w: p.w, h: p.h }));
 
-  const { placed, overflow } = packGuillotine(items, netW, netH, GAP_CM);
+  const { placed, overflow } = packShelf(items, netW, netH, GAP_CM);
 
   const scale = pxPerCm(slabId);
   let usedArea = 0;
@@ -1010,13 +1283,36 @@ function arrangeOptimal(slabId) {
     if (p.connId) updateConnectionVisual(p);
   });
 
-  moveOverflowToWaiting(overflow);
-
   const utilization = Math.round((usedArea / (netW * netH)) * 1000) / 10;
   const result = document.getElementById('arrange-result-' + slabId);
   result.style.display = 'block';
+
+  const fromIdx = slabs.findIndex(s => s.id === slabId);
+  const nextSlab = slabs.slice(fromIdx + 1).find(s => s.img);
   result.innerHTML = `✅ מוקמו ${placed.length} חלקים · ניצול לוח: <b>${utilization}%</b>` +
-    (overflow.length ? `<br>⚠️ ${overflow.length} חלקים הועברו ל"ממתינים לשיבוץ" (לא נכנסו ללוח ${slab.name}) — שבץ אותם בלוח אחר` : '');
+    (overflow.length
+      ? nextSlab
+        ? `<br>⏩ ${overflow.length} חלקים עוברים ללוח ${nextSlab.name} אוטומטית`
+        : `<br>⚠️ ${overflow.length} חלקים לא נכנסו — אין לוח נוסף, עוברים לאזור המתנה`
+      : '');
+
+  moveOverflowToNextSlab(overflow, slabId);
+}
+
+function moveOverflowToNextSlab(list, fromSlabId) {
+  if (!list.length) return;
+  const fromIdx = slabs.findIndex(s => s.id === fromSlabId);
+  const nextSlab = slabs.slice(fromIdx + 1).find(s => s.img);
+  if (!nextSlab) { moveOverflowToWaiting(list); return; }
+  const stage = document.getElementById('stage-' + nextSlab.id);
+  list.forEach(p => {
+    if (p.el.parentElement) p.el.remove();
+    p.slabId = nextSlab.id;
+    stage.appendChild(p.el);
+    p.el.style.left = '20px';
+    p.el.style.top = '20px';
+  });
+  arrangeOptimal(nextSlab.id, true);
 }
 
 function moveOverflowToWaiting(list) {
@@ -1050,6 +1346,21 @@ function refreshUnitSelect() {
     .map(p => `<option value="${p.id}">${p.label} (#${p.id})</option>`)
     .join('') || '<option value="">אין יחידות עדיין</option>';
   if (prevVal) sel.value = prevVal;
+  refreshPieceBookMatchSelects();
+}
+
+function refreshPieceBookMatchSelects() {
+  const slabNameOf = slabId => (slabs.find(s => s.id === slabId) || {}).name || '?';
+  const opts = pieces.filter(p => !p.isCutout)
+    .map(p => `<option value="${p.id}">לוח ${slabNameOf(p.slabId)} · ${p.label} (#${p.id})</option>`)
+    .join('') || '<option value="">אין חלקים עדיין</option>';
+  ['bm-piece-1', 'bm-piece-2'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prevVal = sel.value;
+    sel.innerHTML = opts;
+    if (prevVal) sel.value = prevVal;
+  });
 }
 
 function onUnitSelect() {
@@ -1220,10 +1531,19 @@ function clearAll() {
   refreshUnitSelect();
 }
 
+// מנקה רק את החלקים שהונחו על לוח ספציפי — בלי לגעת בלוחות אחרים או ברשימת המחשבון,
+// כך שאפשר להעביר את אותה רשימה ללוח הבא בלי שהחלקים הקודמים יישארו על הלוח הקודם
+function clearSlabPieces(slabId) {
+  pieces.filter(p => p.slabId === slabId).forEach(p => { clearSeamVisual(p.connId); p.el.remove(); });
+  pieces = pieces.filter(p => p.slabId !== slabId);
+  refreshUnitSelect();
+}
+
 // ── DOWNLOAD AS IMAGE ────────────────────────────────────────────────────
-function downloadImage(slabId) {
+// מצייר לוח בודד (תמונה + חלקים) על קנבס — קוד משותף בין הורדת תמונה רגילה והורדה משולבת (Book Match)
+function renderSlabToCanvas(slabId) {
   const slab = slabs.find(s => s.id === slabId);
-  if (!slab || !slab.img) { alert('אין תמונה בלוח הזה'); return; }
+  if (!slab || !slab.img) return null;
   const stage = document.getElementById('stage-' + slabId);
   const w = parseFloat(stage.style.width);
   const h = parseFloat(stage.style.height);
@@ -1264,9 +1584,231 @@ function downloadImage(slabId) {
     ctx.restore();
   });
 
+  return canvas;
+}
+
+function downloadImage(slabId) {
+  const slab = slabs.find(s => s.id === slabId);
+  const canvas = renderSlabToCanvas(slabId);
+  if (!canvas) { alert('אין תמונה בלוח הזה'); return; }
+
   const link = document.createElement('a');
   link.download = 'slab-' + slab.name + '-arrangement.png';
   link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+// תמונה אחת מאוחדת לזוג Book Match — כך הלקוח רואה את שני הלוחות צמודים זה לזה כיחידה אחת,
+// במקום שתי כרטיסיות נפרדות שקשה לדמיין כיצד הן מתחברות
+function downloadCombinedImage(slabId) {
+  const slab = slabs.find(s => s.id === slabId);
+  if (!slab) return;
+  const partnerId = slab.bookMatchOf || slabs.find(s => s.bookMatchOf === slabId)?.id;
+  if (!partnerId) { alert('ללוח הזה אין זוג Book Match'); return; }
+  const partner = slabs.find(s => s.id === partnerId);
+
+  // הלוח שהוגדר כ"מקור" (prev) מוצג מימין לשמאל לפי סדר היצירה
+  const leftId = (slab.bookMatchOf ? partnerId : slabId);
+  const rightId = (slab.bookMatchOf ? slabId : partnerId);
+  const leftCanvas = renderSlabToCanvas(leftId);
+  const rightCanvas = renderSlabToCanvas(rightId);
+  if (!leftCanvas || !rightCanvas) { alert('יש להעלות תמונה לשני הלוחות לפני הורדה משולבת'); return; }
+
+  const gap = 4; // קו דק בין הלוחות, מדמה את תפר ההדבקה בפועל
+  const combined = document.createElement('canvas');
+  combined.width = leftCanvas.width + gap + rightCanvas.width;
+  combined.height = Math.max(leftCanvas.height, rightCanvas.height);
+  const ctx = combined.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, combined.width, combined.height);
+  ctx.drawImage(leftCanvas, 0, 0);
+  ctx.drawImage(rightCanvas, leftCanvas.width + gap, 0);
+
+  const link = document.createElement('a');
+  link.download = 'book-match-' + partner.name + '-' + slab.name + '.png';
+  link.href = combined.toDataURL('image/png');
+  link.click();
+}
+
+// חותכים מתוך תמונת הלוח המלאה (ברזולוציה האמיתית, לא 800px התצוגה) רק את האזור של החלק הספציפי הזה
+function getPieceTextureCanvas(piece) {
+  const slab = slabs.find(s => s.id === piece.slabId);
+  if (!slab || !slab.img) return null;
+  const stage = document.getElementById('stage-' + slab.id);
+  const containerW = parseFloat(stage.style.width), containerH = parseFloat(stage.style.height);
+  const scaleX = slab.img.naturalWidth / containerW, scaleY = slab.img.naturalHeight / containerH;
+
+  const left = parseFloat(piece.el.style.left), top = parseFloat(piece.el.style.top);
+  const w = parseFloat(piece.el.style.width), h = parseFloat(piece.el.style.height);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(slab.img, left * scaleX, top * scaleY, w * scaleX, h * scaleY, 0, 0, w, h);
+  return canvas;
+}
+
+// תצוגת Book Match בין שני חלקים קונקרטיים (גם משני לוחות שונים) — לא הלוח כולו, רק שני האזורים שנגזרו בפועל.
+// משקפים את החלק השני אופקית כדי לדמות איך התפר ביניהם יראה אם דבקים אותם זה לזה במראה הפוכה
+function downloadPieceBookMatch() {
+  const id1 = parseInt(document.getElementById('bm-piece-1').value);
+  const id2 = parseInt(document.getElementById('bm-piece-2').value);
+  const p1 = pieces.find(p => p.id === id1), p2 = pieces.find(p => p.id === id2);
+  if (!p1 || !p2) { alert('בחר שני חלקים'); return; }
+  if (p1.id === p2.id) { alert('בחר שני חלקים שונים'); return; }
+
+  const c1 = getPieceTextureCanvas(p1), c2 = getPieceTextureCanvas(p2);
+  if (!c1 || !c2) { alert('יש להעלות תמונה ללוחות של שני החלקים'); return; }
+
+  const gap = 4;
+  const h = Math.max(c1.height, c2.height);
+  const combined = document.createElement('canvas');
+  combined.width = c1.width + gap + c2.width;
+  combined.height = h;
+  const ctx = combined.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, combined.width, combined.height);
+  ctx.drawImage(c1, 0, (h - c1.height) / 2);
+  ctx.save();
+  ctx.translate(c1.width + gap + c2.width, (h - c2.height) / 2);
+  ctx.scale(-1, 1);
+  ctx.drawImage(c2, 0, 0);
+  ctx.restore();
+
+  const link = document.createElement('a');
+  link.download = `book-match-piece-${p1.id}-${p2.id}.png`;
+  link.href = combined.toDataURL('image/png');
+  link.click();
+}
+
+// ── PICK MODE — בחירת שני חלקים ל-Book Match בלחיצה על הלוח, במקום מתפריטים ──
+let pickMode = false;
+let pickFirst = null;
+
+function togglePickMode() {
+  pickMode = !pickMode;
+  pickFirst = null;
+  document.querySelectorAll('.piece.pick-selected').forEach(el => el.classList.remove('pick-selected'));
+  const btn = document.getElementById('pick-mode-btn');
+  btn.textContent = pickMode ? '👆 לחץ על החלק הראשון בלוח...' : '👆 בחר חלקים בלחיצה על הלוח';
+  btn.classList.toggle('active', pickMode);
+}
+
+function onPieceClick(piece) {
+  if (!pickMode) return;
+  if (!pickFirst) {
+    pickFirst = piece;
+    piece.el.classList.add('pick-selected');
+    document.getElementById('pick-mode-btn').textContent = '👆 עכשיו לחץ על החלק השני...';
+    return;
+  }
+  if (pickFirst.id === piece.id) {
+    // לחיצה שנייה נחתה על אותו חלק — בד"כ סימן שחלקים אחרים מוסתרים מתחתיו (חלקים חדשים
+    // נוצרים ערוכים זה על זה בפינה, עם הפרש של רק כ-18px). מזכירים למשתמש לגרור אותם הצידה,
+    // או להשתמש בתפריטים למטה שעובדים תמיד גם כשהחלקים חופפים על המסך
+    alert('לחצת על אותו חלק. אם חלקים אחרים מוסתרים מתחתיו — גרור אותו הצידה כדי לחשוף את החלק שתחתיו, או בחר משני התפריטים "חלק 1 / חלק 2" למטה (הם עובדים גם כשחלקים חופפים).');
+    return;
+  }
+
+  document.getElementById('bm-piece-1').value = pickFirst.id;
+  document.getElementById('bm-piece-2').value = piece.id;
+
+  pickFirst.el.classList.remove('pick-selected');
+  pickMode = false;
+  pickFirst = null;
+  const btn = document.getElementById('pick-mode-btn');
+  btn.textContent = '👆 בחר חלקים בלחיצה על הלוח';
+  btn.classList.remove('active');
+
+  downloadPieceBookMatch();
+}
+
+// ── SEAM PICK — מסמנים נקודה ישירות על תמונת הלוח (לא חלק קבוע מהמחשבון) שתהיה נקודת התפר
+// מול הלוח השני; הכלי שומר את השטח שמשמאל לנקודה בכל לוח, משקף את הלוח השני, ומחבר בתפר
+let seamPickMode = false;
+let seamPoints = [];
+
+function toggleSeamPickMode() {
+  seamPickMode = !seamPickMode;
+  seamPoints = [];
+  document.querySelectorAll('[id^="seam-mark-"]').forEach(el => el.remove());
+  const btn = document.getElementById('seam-pick-btn');
+  btn.textContent = seamPickMode ? '📍 לחץ על נקודת התפר בלוח הראשון...' : '📍 סמן 2 נקודות תפר על הלוחות';
+  btn.classList.toggle('active', seamPickMode);
+}
+
+function onSeamPick(slabId, xPx) {
+  seamPoints = seamPoints.filter(p => p.slabId !== slabId); // סימון חדש על אותו לוח מחליף את הקודם
+  seamPoints.push({ slabId, x: xPx });
+  drawSeamMarker(slabId, xPx);
+
+  if (seamPoints.length < 2) {
+    document.getElementById('seam-pick-btn').textContent = '📍 עכשיו לחץ על נקודת התפר בלוח השני...';
+    return;
+  }
+  const [p1, p2] = seamPoints;
+  seamPickMode = false;
+  seamPoints = [];
+  document.getElementById('seam-pick-btn').textContent = '📍 סמן 2 נקודות תפר על הלוחות';
+  document.getElementById('seam-pick-btn').classList.remove('active');
+  downloadSeamPreview(p1, p2);
+}
+
+function drawSeamMarker(slabId, xPx) {
+  const stage = document.getElementById('stage-' + slabId);
+  let marker = document.getElementById('seam-mark-' + slabId);
+  if (!marker) {
+    marker = document.createElement('div');
+    marker.id = 'seam-mark-' + slabId;
+    marker.style.cssText = 'position:absolute; top:0; bottom:0; width:2px; background:#FFD93D; z-index:20; pointer-events:none; box-shadow:0 0 6px #FFD93D;';
+    stage.appendChild(marker);
+  }
+  marker.style.left = xPx + 'px';
+}
+
+// חותכים מכל לוח את השטח שמשמאל לנקודה שסומנה (עד רוחב ההצגה שנבחר), כך שהנקודה עצמה
+// תהיה בקצה הימני של הקטע — ואז משקפים את לוח B כדי שהנקודה שלו תהיה בדיוק בתפר גם היא
+function downloadSeamPreview(p1, p2) {
+  const slabA = slabs.find(s => s.id === p1.slabId), slabB = slabs.find(s => s.id === p2.slabId);
+  if (!slabA?.img || !slabB?.img) { alert('יש להעלות תמונה לשני הלוחות'); return; }
+  const halfCm = parseFloat(document.getElementById('seam-preview-width').value) || 60;
+
+  function cropLeftOfPoint(slab, xPx) {
+    const stage = document.getElementById('stage-' + slab.id);
+    const containerW = parseFloat(stage.style.width), containerH = parseFloat(stage.style.height);
+    const slabW = parseFloat(document.getElementById('slab-w-' + slab.id).value);
+    const pxPerCm = containerW / slabW;
+    const halfPx = halfCm * pxPerCm;
+    const scaleX = slab.img.naturalWidth / containerW, scaleY = slab.img.naturalHeight / containerH;
+
+    const rightPx = xPx, leftPx = Math.max(0, xPx - halfPx);
+    const wPx = rightPx - leftPx;
+    const canvas = document.createElement('canvas');
+    canvas.width = wPx * scaleX; canvas.height = containerH * scaleY;
+    canvas.getContext('2d').drawImage(slab.img, leftPx * scaleX, 0, wPx * scaleX, containerH * scaleY, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+
+  const cA = cropLeftOfPoint(slabA, p1.x);
+  const cB = cropLeftOfPoint(slabB, p2.x);
+
+  const gap = 4;
+  const h = Math.max(cA.height, cB.height);
+  const combined = document.createElement('canvas');
+  combined.width = cA.width + gap + cB.width;
+  combined.height = h;
+  const ctx = combined.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, combined.width, combined.height);
+  ctx.drawImage(cA, 0, (h - cA.height) / 2);
+  ctx.save();
+  ctx.translate(cA.width + gap + cB.width, (h - cB.height) / 2);
+  ctx.scale(-1, 1);
+  ctx.drawImage(cB, 0, 0);
+  ctx.restore();
+
+  const link = document.createElement('a');
+  link.download = `seam-preview-${slabA.name}-${slabB.name}.png`;
+  link.href = combined.toDataURL('image/png');
   link.click();
 }
 </script>
