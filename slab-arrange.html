@@ -1224,12 +1224,14 @@ function packShelf(items, binW, binH, gap) {
 
   queue.forEach(it => {
     // מנסים להכניס למדף הנוכחי באוריינטציה המקורית, ואז מסובב, לפני שעוברים למדף חדש
-    if (shelfStarted && cursorX + it.w <= binW && shelfY + it.h <= binH) {
+    // חשוב: הבדיקה היא מול גובה המדף שכבר נקבע (shelfH) — לא מול השטח הכללי שנשאר בלוח (binH) —
+    // אחרת חלק שמתאים ל"מה שנשאר בלוח" אבל גבוה יותר מהמדף הנוכחי יוצא מגבולות המדף (ולעיתים מהלוח עצמו)
+    if (shelfStarted && cursorX + it.w <= binW && it.h <= shelfH) {
       placed.push({ piece: it.piece, x: cursorX, y: shelfY, w: it.w, h: it.h, rotate: false });
       cursorX += it.w + gap;
       return;
     }
-    if (shelfStarted && cursorX + it.h <= binW && shelfY + it.w <= binH) {
+    if (shelfStarted && cursorX + it.h <= binW && it.w <= shelfH) {
       placed.push({ piece: it.piece, x: cursorX, y: shelfY, w: it.h, h: it.w, rotate: true });
       cursorX += it.h + gap;
       return;
