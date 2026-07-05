@@ -116,6 +116,7 @@
   }
   .piece.snapping { border-width:2px !important; }
   .piece.pick-selected { outline:3px solid #FFD93D; outline-offset:2px; }
+  .piece.selected { outline:3px solid #5b6bff; outline-offset:2px; }
   #pick-mode-btn.active, #seam-pick-btn.active { border-color:#FFD93D; color:#FFD93D; background:rgba(255,217,61,0.18); }
   .snap-guide {
     position:absolute; background:#FF5C2E; z-index:15; pointer-events:none;
@@ -461,9 +462,13 @@ function renderSlabStage(slab) {
   document.getElementById('stages-container').appendChild(block);
 
   document.getElementById('stage-' + slab.id).addEventListener('click', e => {
-    if (!seamPickMode || e.target.closest('.piece')) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    onSeamPick(slab.id, e.clientX - rect.left);
+    if (seamPickMode) {
+      if (e.target.closest('.piece')) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      onSeamPick(slab.id, e.clientX - rect.left);
+      return;
+    }
+    if (!e.target.closest('.piece')) selectPiece(null);
   });
 }
 
@@ -730,6 +735,14 @@ function onBookMatchToggle(slabId) {
     alert('צריך להעלות קודם תמונה ללוח ' + (prev ? prev.name : '') + ' כדי ליצור ממנו מראה הפוכה');
     document.getElementById('bookmatch-' + slabId).checked = false;
     return;
+  }
+  // אם כבר הועלתה תמונה אמיתית ללוח הזה (ולא מראה שנוצרה קודם) — לוודא שהמשתמש מודע שהיא תימחק
+  if (slab.img && !slab.bookMatchOf) {
+    const ok = confirm('ללוח ' + slab.name + ' כבר הועלתה תמונה משלו. סימון "Book Match" יחליף אותה במראה הפוכה של לוח ' + prev.name + ' — התמונה שהעלית תימחק. להמשיך?');
+    if (!ok) {
+      document.getElementById('bookmatch-' + slabId).checked = false;
+      return;
+    }
   }
   // יוצרים מראה הפוכה (flip אופקי) של תמונת הלוח הקודם — קירוב חזותי ל-Book Match כשאין תמונה אמיתית לפלטה השנייה
   const canvas = document.createElement('canvas');
@@ -1045,7 +1058,8 @@ function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel)
 
   el.addEventListener('click', e => {
     if (e.target.classList.contains('ctrl-btn')) return;
-    onPieceClick(piece);
+    if (pickMode) { onPieceClick(piece); return; }
+    selectPiece(piece);
   });
 
   el.querySelector('.rotate-btn').addEventListener('click', e => {
@@ -1068,10 +1082,7 @@ function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel)
 
   el.querySelector('.del-btn').addEventListener('click', e => {
     e.stopPropagation();
-    clearSeamVisual(piece.connId);
-    el.remove();
-    pieces = pieces.filter(p => p.id !== id);
-    refreshUnitSelect();
+    deletePieceObj(piece);
   });
 
   refreshUnitSelect();
@@ -1538,6 +1549,7 @@ function clearAll() {
 function clearSlabPieces(slabId) {
   pieces.filter(p => p.slabId === slabId).forEach(p => { clearSeamVisual(p.connId); p.el.remove(); });
   pieces = pieces.filter(p => p.slabId !== slabId);
+  if (selectedPiece && selectedPiece.slabId === slabId) selectedPiece = null;
   refreshUnitSelect();
 }
 
@@ -1681,6 +1693,33 @@ function downloadPieceBookMatch() {
   link.href = combined.toDataURL('image/png');
   link.click();
 }
+
+// ── SELECTION — בחירת חלק בלחיצה רגילה (לא pick-mode) כדי לאפשר מחיקה עם Delete/Backspace ──
+let selectedPiece = null;
+
+function selectPiece(piece) {
+  if (selectedPiece && selectedPiece.el) selectedPiece.el.classList.remove('selected');
+  selectedPiece = piece;
+  if (piece) piece.el.classList.add('selected');
+}
+
+function deletePieceObj(piece) {
+  clearSeamVisual(piece.connId);
+  piece.el.remove();
+  pieces = pieces.filter(p => p.id !== piece.id);
+  if (selectedPiece && selectedPiece.id === piece.id) selectedPiece = null;
+  refreshUnitSelect();
+}
+
+document.addEventListener('keydown', e => {
+  if (!selectedPiece) return;
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    deletePieceObj(selectedPiece);
+  }
+});
 
 // ── PICK MODE — בחירת שני חלקים ל-Book Match בלחיצה על הלוח, במקום מתפריטים ──
 let pickMode = false;
