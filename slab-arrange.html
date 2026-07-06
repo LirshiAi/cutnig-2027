@@ -545,6 +545,7 @@ function renderSlabStage(slab) {
       <button onclick="recropSlab('${slab.id}')">✂️ חיתוך מחדש</button>
       <button onclick="downloadImage('${slab.id}')">📥 הורד תמונה</button>
       <button onclick="downloadCombinedImage('${slab.id}')">🖼️ הורד Book Match — לוח שלם</button>
+      <button onclick="exportSlabDXF('${slab.id}')">⬇️ ייצוא DXF (ל-CNC)</button>
       <button onclick="clearSlabPieces('${slab.id}')">🗑️ נקה חלקים מהלוח הזה</button>
     </div>
     <div class="hint" id="arrange-result-${slab.id}" style="display:none"></div>
@@ -649,6 +650,11 @@ function ensureCropModal() {
         <polygon id="crop-quad-poly" style="fill:rgba(255,92,46,0.15); stroke:#FF5C2E; stroke-width:2;"></polygon>
       </svg>
     </div>
+    <div style="display:flex; gap:14px; align-items:center; color:#ccc; font-size:12px;">
+      <label>אורך הלוח (מ"מ) <input type="number" id="crop-w-mm" style="width:80px; padding:5px 7px; border-radius:6px; border:1px solid #444; background:#1a1a1a; color:#fff;"></label>
+      <label>רוחב הלוח (מ"מ) <input type="number" id="crop-h-mm" style="width:80px; padding:5px 7px; border-radius:6px; border:1px solid #444; background:#1a1a1a; color:#fff;"></label>
+      <span id="crop-diag-hint" style="color:#4ECDC4"></span>
+    </div>
     <div style="display:flex; gap:10px;">
       <button id="crop-confirm-btn" style="background:#FF5C2E; border:none; border-radius:10px; color:#fff; padding:10px 22px; font-size:14px; cursor:pointer;">✓ אישור וייישור</button>
       <button id="crop-skip-btn" style="background:transparent; border:1px solid #4ECDC4; border-radius:10px; color:#4ECDC4; padding:10px 22px; font-size:14px; cursor:pointer;">⏩ התמונה כבר נקייה — טען כמו שהיא</button>
@@ -670,6 +676,22 @@ function ensureCropModal() {
   modal.querySelector('#crop-confirm-btn').addEventListener('click', confirmCrop);
   modal.querySelector('#crop-skip-btn').addEventListener('click', skipCrop);
   modal.querySelector('#crop-cancel-btn').addEventListener('click', cancelCrop);
+  modal.querySelector('#crop-w-mm').addEventListener('input', updateCropDiagHint);
+  modal.querySelector('#crop-h-mm').addEventListener('input', updateCropDiagHint);
+}
+
+// אלכסון (פיתגורס) לפי אורך/רוחב שהוזנו — כלי בדיקה: מודדים את האלכסון האמיתי בפועל על הלוח
+// (עם סרט מדידה) ומשווים למספר הזה, כדי לוודא שהמידות שהוזנו נכונות לפני שממשיכים
+function updateCropDiagHint() {
+  const w = parseFloat(document.getElementById('crop-w-mm').value);
+  const h = parseFloat(document.getElementById('crop-h-mm').value);
+  const hint = document.getElementById('crop-diag-hint');
+  if (w > 0 && h > 0) {
+    const diag = Math.round(Math.sqrt(w * w + h * h));
+    hint.textContent = 'אלכסון צפוי: ' + diag + ' מ"מ (למדוד ולוודא)';
+  } else {
+    hint.textContent = '';
+  }
 }
 
 function openCropModal(slab, img, onDone) {
@@ -677,6 +699,11 @@ function openCropModal(slab, img, onDone) {
   cropState = { slab, img, onDone };
   const modal = document.getElementById('crop-modal');
   const imgEl = document.getElementById('crop-img');
+  const slabWMm = (parseFloat(document.getElementById('slab-w-' + slab.id).value) || 320) * 10;
+  const slabHMm = (parseFloat(document.getElementById('slab-h-' + slab.id).value) || 160) * 10;
+  document.getElementById('crop-w-mm').value = slabWMm;
+  document.getElementById('crop-h-mm').value = slabHMm;
+  updateCropDiagHint();
   imgEl.onload = initCropPins;
   imgEl.src = img.src;
   modal.style.display = 'flex';
@@ -788,8 +815,14 @@ function confirmCrop() {
   const scaleX = img.naturalWidth / dispW, scaleY = img.naturalHeight / dispH;
   const srcCorners = points.map(p => ({ x: p.x * scaleX, y: p.y * scaleY }));
 
-  const slabW = parseFloat(document.getElementById('slab-w-' + slab.id).value) || 320;
-  const slabH = parseFloat(document.getElementById('slab-h-' + slab.id).value) || 160;
+  // כותבים את המידות שהוזנו כאן (מ"מ) חזרה לשדות אורך/רוחב הלוח (ס"מ) — כך שהיישור
+  // תמיד יתאים בדיוק למה שהמשתמש הזין ברגע הזה, גם אם שכח לעדכן אותם קודם מחוץ לחלון החיתוך
+  const wMm = parseFloat(document.getElementById('crop-w-mm').value);
+  const hMm = parseFloat(document.getElementById('crop-h-mm').value);
+  const slabW = (wMm > 0 ? wMm / 10 : parseFloat(document.getElementById('slab-w-' + slab.id).value)) || 320;
+  const slabH = (hMm > 0 ? hMm / 10 : parseFloat(document.getElementById('slab-h-' + slab.id).value)) || 160;
+  document.getElementById('slab-w-' + slab.id).value = slabW;
+  document.getElementById('slab-h-' + slab.id).value = slabH;
   const destW = 1400, destH = Math.round(1400 * (slabH / slabW));
 
   const canvas = warpQuadToRect(img, srcCorners, destW, destH);
@@ -1096,6 +1129,36 @@ function addDxfToCalc() {
     const points = (s.points && s.points.length > 4) ? s.points.map(p => [p[0] * factor, p[1] * factor]) : null;
     addRow(w, h, points);
   });
+}
+
+// ── EXPORT DXF (CNC-ready) — הכיוון ההפוך מייבוא: מוציאים את הפיזור הסופי כקובץ DXF ──
+// כל חלק יוצא כ-LWPOLYLINE נפרד, במיקום האמיתי שלו על הלוח (ס"מ), עם הצורה האמיתית שלו
+// (הפוליגון שנשמר מ-DXF מקורי, או מלבן פשוט אם זה חלק שנוצר ידנית מהמחשבון)
+function exportSlabDXF(slabId) {
+  const slab = slabs.find(s => s.id === slabId);
+  if (!slab) return;
+  const slabPieces = pieces.filter(p => p.slabId === slabId && !p.isCutout);
+  if (!slabPieces.length) { alert('אין חלקים על לוח זה לייצוא'); return; }
+  const scale = pxPerCm(slabId);
+
+  let dxf = '0\nSECTION\n2\nENTITIES\n';
+  slabPieces.forEach(p => {
+    const xCm = p.x / scale, yCm = p.y / scale;
+    const pts = (p.shapePoints && p.shapePoints.length > 2)
+      ? p.shapePoints
+      : [[0, 0], [p.w, 0], [p.w, p.h], [0, p.h]];
+    dxf += '0\nLWPOLYLINE\n8\n' + (p.label || 'part').replace(/[\r\n]/g, ' ') + '\n70\n1\n';
+    pts.forEach(pt => {
+      dxf += '10\n' + (xCm + pt[0]).toFixed(2) + '\n20\n' + (yCm + pt[1]).toFixed(2) + '\n';
+    });
+  });
+  dxf += '0\nENDSEC\n0\nEOF\n';
+
+  const blob = new Blob([dxf], { type: 'application/dxf' });
+  const link = document.createElement('a');
+  link.download = 'לוח_' + slab.name + '.dxf';
+  link.href = URL.createObjectURL(blob);
+  link.click();
 }
 
 // ── GENERATE PIECES FROM CALCULATOR ───────────────────────────────────────
