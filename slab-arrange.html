@@ -332,7 +332,7 @@ let dxfShapes = [];
 const COLORS = ['#FF5C2E','#4ECDC4','#FFD93D','#A78BFA','#6BCB77','#FF6B9D','#5BC0EB','#F4A261'];
 
 // ── CALCULATOR ROWS ──────────────────────────────────────────────────────
-function addRow(presetW, presetH) {
+function addRow(presetW, presetH, points) {
   rowCount++;
   const calc = document.getElementById('pieces-calc');
   const row = document.createElement('div');
@@ -346,9 +346,11 @@ function addRow(presetW, presetH) {
     <input type="number" placeholder="כמ׳" id="row-q-${rowCount}" value="1" style="max-width:46px">
     <span class="cutout-toggle" id="cutout-${rowCount}" title="סמן כפתח (כיור/כיריים)" onclick="toggleCutout(${rowCount})">🕳️</span>
     <span class="del-row" onclick="removeRow(${rowCount})">✕</span>
+    ${points ? '<span title="נשמרה הצורה האמיתית מה-DXF (לא רק מלבן)" style="font-size:13px">📐</span>' : ''}
   `;
   row.dataset.color = color;
   row.dataset.cutout = 'false';
+  if (points) row.dataset.points = JSON.stringify(points);
   calc.appendChild(row);
 }
 
@@ -790,6 +792,7 @@ function resizeStage(slab) {
       p.el.style.left = left + 'px'; p.el.style.top = top + 'px';
       p.el.style.width = w + 'px'; p.el.style.height = h + 'px';
       p.x = left; p.y = top;
+      renderShapeOverlay(p);
     });
     pieces.filter(p => p.slabId === slab.id && p.connId).forEach(updateConnectionVisual);
   }
@@ -960,12 +963,15 @@ function parseDXF(text, debug) {
     }
   }
 
-  // compute bounding box per shape (in file units)
+  // compute bounding box per shape (in file units) — וגם שומרים את הנקודות עצמן (מנורמלות ל-0,0)
+  // כדי שאפשר יהיה לצייר את הצורה האמיתית (מדרגה/זווית) ולא רק מלבן שמסתיר את הפרטים
   info.shapes = shapes.map(s => {
     const xs = s.points.map(p => p[0]), ys = s.points.map(p => p[1]);
-    const w = Math.max(...xs) - Math.min(...xs);
-    const h = Math.max(...ys) - Math.min(...ys);
-    return { w: Math.round(w * 10) / 10, h: Math.round(h * 10) / 10 };
+    const minX = Math.min(...xs), minY = Math.min(...ys);
+    const w = Math.max(...xs) - minX;
+    const h = Math.max(...ys) - minY;
+    const points = s.points.map(p => [Math.round((p[0] - minX) * 10) / 10, Math.round((p[1] - minY) * 10) / 10]);
+    return { w: Math.round(w * 10) / 10, h: Math.round(h * 10) / 10, points };
   }).filter(s => s.w > 1 && s.h > 1); // filter out degenerate/noise shapes
 
   return debug ? info : info.shapes;
@@ -991,12 +997,16 @@ function renderDxfResults() {
 }
 
 function addDxfToCalc() {
+  const factor = dxfUnit === 'mm' ? 0.1 : 1; // convert to cm
   dxfShapes.forEach((s, i) => {
     const chk = document.getElementById('dxf-chk-' + i);
     if (!chk || !chk.checked) return;
     const w = parseFloat(document.getElementById('dxf-w-' + i).value);
     const h = parseFloat(document.getElementById('dxf-h-' + i).value);
-    addRow(w, h);
+    // אם הצורה היא לא סתם מלבן (יותר מ-4 פינות, או 4 פינות שלא יוצרות זווית ישרה) — שומרים אותה
+    // כפוליגון אמיתי (בס"מ) כדי לצייר בהמשך את המדרגה/הזווית האמיתית, לא תיבה שמסתירה אותה
+    const points = (s.points && s.points.length > 4) ? s.points.map(p => [p[0] * factor, p[1] * factor]) : null;
+    addRow(w, h, points);
   });
 }
 
@@ -1017,8 +1027,17 @@ function generatePieces(slabId) {
     const isCutout = row.dataset.cutout === 'true';
     if (!w || !h) return;
 
+    // אם נשמרה צורה אמיתית מה-DXF — מתאימים אותה ליחס w/h הנוכחי בשורה (למקרה שהמשתמש עידכן ידנית)
+    let points = null;
+    if (row.dataset.points) {
+      const raw = JSON.parse(row.dataset.points);
+      const xs = raw.map(p => p[0]), ys = raw.map(p => p[1]);
+      const origW = Math.max(...xs) || 1, origH = Math.max(...ys) || 1;
+      points = raw.map(p => [p[0] * (w / origW), p[1] * (h / origH)]);
+    }
+
     for (let i = 0; i < qty; i++) {
-      createPiece(w, h, color, 20 + stackOffset, 20 + stackOffset, isCutout, slabId);
+      createPiece(w, h, color, 20 + stackOffset, 20 + stackOffset, isCutout, slabId, null, null, points);
       stackOffset += 18;
     }
   });
@@ -1027,7 +1046,32 @@ function generatePieces(slabId) {
   arrangeOptimal(slabId);
 }
 
-function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel) {
+// מצייר את הצורה האמיתית (פוליגון, כמו מדרגה/זווית שהגיעה מ-DXF) בתוך תיבת החלק המלבנית —
+// התיבה עצמה (w×h) עדיין המלבן התוחם שמשמש לגרירה/סידור/חישובים, אבל ה-SVG מראה איפה השיש
+// האמיתי נגמר, כדי שלא נצייר/נחתוך צורה שנראית מלבן אבל בפועל היא מדרגה
+function renderShapeOverlay(piece) {
+  const scale = pxPerCm(piece.slabId);
+  let svg = piece.el.querySelector('.shape-overlay');
+  if (!piece.shapePoints) { if (svg) svg.remove(); return; }
+  if (!svg) {
+    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'shape-overlay');
+    svg.style.cssText = 'position:absolute; top:0; left:0; pointer-events:none;';
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    poly.setAttribute('fill', 'none');
+    poly.setAttribute('stroke', '#fff');
+    poly.setAttribute('stroke-width', '1.5');
+    poly.setAttribute('stroke-dasharray', '5,4');
+    svg.appendChild(poly);
+    piece.el.insertBefore(svg, piece.el.firstChild);
+  }
+  const wPx = piece.w * scale, hPx = piece.h * scale;
+  svg.setAttribute('width', wPx);
+  svg.setAttribute('height', hPx);
+  svg.querySelector('polygon').setAttribute('points', piece.shapePoints.map(p => `${p[0] * scale},${p[1] * scale}`).join(' '));
+}
+
+function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel, points) {
   const scale = pxPerCm(slabId);
   const id = pieceIdCounter++;
   const wPx = wCm * scale, hPx = hCm * scale;
@@ -1051,8 +1095,9 @@ function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel)
 
   document.getElementById('stage-' + slabId).appendChild(el);
 
-  const piece = { id, el, w: wCm, h: hCm, x, y, rotated: false, color, label, isCutout: !!isCutout, connId: connId || null, slabId };
+  const piece = { id, el, w: wCm, h: hCm, x, y, rotated: false, color, label, isCutout: !!isCutout, connId: connId || null, slabId, shapePoints: points || null };
   pieces.push(piece);
+  renderShapeOverlay(piece);
 
   makeDraggable(el, piece);
 
@@ -1066,12 +1111,15 @@ function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel)
     e.stopPropagation();
     // מחליפים בפועל רוחב/גובה (לא רק CSS transform חזותי) — אחרת תיבת המידות בפועל
     // לא תואמת למה שנראה על המסך, וזה גורם לחישובי "נכנס/לא נכנס ללוח" שגויים
+    const oldH = piece.h;
     const tmp = piece.w; piece.w = piece.h; piece.h = tmp;
+    if (piece.shapePoints) piece.shapePoints = piece.shapePoints.map(p => [p[1], oldH - p[0]]);
     const scale = pxPerCm(piece.slabId);
     el.style.width = (piece.w * scale) + 'px';
     el.style.height = (piece.h * scale) + 'px';
     piece.label = (piece.isCutout ? '🕳️ ' : '') + piece.w + '×' + piece.h + (piece.label.match(/\(\d\/\d\)/) ? ' ' + piece.label.match(/\(\d\/\d\)/)[0] : '');
     el.querySelector('.piece-label').textContent = piece.label;
+    renderShapeOverlay(piece);
     updateConnectionVisual(piece);
   });
 
@@ -1281,7 +1329,11 @@ function arrangeOptimal(slabId, silent = false) {
   let usedArea = 0;
   placed.forEach(pl => {
     const p = pl.piece;
-    if (pl.rotate) { const t = p.w; p.w = p.h; p.h = t; }
+    if (pl.rotate) {
+      const oldH = p.h;
+      const t = p.w; p.w = p.h; p.h = t;
+      if (p.shapePoints) p.shapePoints = p.shapePoints.map(pt => [pt[1], oldH - pt[0]]);
+    }
     p.rotated = false;
     p.el.style.transform = 'none';
     p.el.style.width = (p.w * scale) + 'px';
@@ -1292,6 +1344,7 @@ function arrangeOptimal(slabId, silent = false) {
     const connTag = (p.label.match(/\(\d\/\d\)/) || [''])[0];
     p.label = p.w + '×' + p.h + (connTag ? ' ' + connTag : '');
     p.el.querySelector('.piece-label').textContent = p.label;
+    renderShapeOverlay(p);
     usedArea += p.w * p.h;
     if (p.connId) updateConnectionVisual(p);
   });
@@ -1444,11 +1497,16 @@ function openEditPopover(piece) {
     const newH = parseFloat(document.getElementById('edit-h-' + piece.id).value);
     if (newW > 0 && newH > 0) {
       const scale = pxPerCm(piece.slabId);
+      if (piece.shapePoints) {
+        const rw = newW / piece.w, rh = newH / piece.h;
+        piece.shapePoints = piece.shapePoints.map(p => [p[0] * rw, p[1] * rh]);
+      }
       piece.w = newW; piece.h = newH;
       piece.label = (piece.isCutout ? '🕳️ ' : '') + newW + '×' + newH;
       piece.el.style.width = (newW * scale) + 'px';
       piece.el.style.height = (newH * scale) + 'px';
       piece.el.querySelector('.piece-label').textContent = piece.label;
+      renderShapeOverlay(piece);
     }
     pop.remove();
   });
