@@ -7,133 +7,133 @@
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
-    background:#0a0a0a; font-family:'Segoe UI',Arial,sans-serif; color:#fff;
+    background:#efece3; font-family:'Segoe UI',Arial,sans-serif; color:#2b2b26;
     min-height:100vh; padding:30px 20px 80px;
   }
   .wrap { max-width:1300px; margin:0 auto; }
   .header { text-align:center; margin-bottom:32px; }
   .header h1 { font-size:24px; font-weight:900; }
-  .header h1 span { color:#FF5C2E; }
-  .header p { color:#555; font-size:13px; margin-top:6px; }
+  .header h1 span { color:#c9973a; }
+  .header p { color:#8a8578; font-size:13px; margin-top:6px; }
 
   .grid { display:grid; grid-template-columns: 320px 1fr; gap:24px; align-items:start; }
   @media (max-width:900px) { .grid { grid-template-columns: 1fr; } }
 
-  .panel { background:#111; border:1px solid #1e1e1e; border-radius:18px; padding:22px; }
+  .panel { background:#ffffff; border:1px solid #ddd6c5; border-radius:18px; padding:22px; }
   .panel h3 {
     font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
-    color:#FF5C2E; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #1e1e1e;
+    color:#a07d2e; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #e8e2d2;
   }
   .field { margin-bottom:14px; }
-  .field label { display:block; font-size:12px; color:#777; margin-bottom:6px; }
+  .field label { display:block; font-size:12px; color:#8a8578; margin-bottom:6px; }
   .row2 { display:flex; gap:8px; }
   input[type=text], input[type=number] {
-    width:100%; background:#0a0a0a; border:1px solid #222; border-radius:10px;
-    padding:9px 11px; color:#fff; font-size:13px; font-family:inherit; outline:none;
+    width:100%; background:#faf8f3; border:1px solid #ddd6c5; border-radius:10px;
+    padding:9px 11px; color:#2b2b26; font-size:13px; font-family:inherit; outline:none;
   }
-  input:focus { border-color:#FF5C2E; }
+  input:focus { border-color:#c9973a; }
 
   .upload-zone {
-    border:2px dashed #222; border-radius:14px; padding:20px; text-align:center;
+    border:2px dashed #ddd6c5; border-radius:14px; padding:20px; text-align:center;
     cursor:pointer; transition:border-color .15s; margin-bottom:16px;
   }
-  .upload-zone:hover, .upload-zone.drag { border-color:#FF5C2E; }
+  .upload-zone:hover, .upload-zone.drag { border-color:#c9973a; }
   .upload-zone .icon { font-size:24px; margin-bottom:6px; }
-  .upload-zone .txt { font-size:12px; color:#555; }
+  .upload-zone .txt { font-size:12px; color:#8a8578; }
   #file-input { display:none; }
 
   .piece-row {
     display:flex; gap:6px; align-items:center; margin-bottom:8px;
     border:1px solid transparent; border-radius:10px; padding:2px;
   }
-  .piece-row.is-cutout { border-color:#2a1500; background:#0f0800; }
+  .piece-row.is-cutout { border-color:#e8dfc8; background:#f7f2e4; }
   .piece-row .swatch { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
   .piece-row input { font-size:13px; padding:8px 9px; }
   .piece-row .cutout-toggle {
-    flex-shrink:0; width:26px; height:26px; border-radius:7px; border:1px solid #2a2a2a;
-    background:#0a0a0a; color:#444; font-size:12px; cursor:pointer; display:flex;
+    flex-shrink:0; width:26px; height:26px; border-radius:7px; border:1px solid #ddd6c5;
+    background:#faf8f3; color:#8a8578; font-size:12px; cursor:pointer; display:flex;
     align-items:center; justify-content:center;
   }
-  .piece-row .cutout-toggle.active { border-color:#FF5C2E; color:#FF5C2E; background:rgba(255,92,46,0.1); }
-  .piece-row .del-row { color:#333; cursor:pointer; font-size:14px; padding:0 4px; flex-shrink:0; }
-  .piece-row .del-row:hover { color:#ff4444; }
+  .piece-row .cutout-toggle.active { border-color:#c9973a; color:#c9973a; background:rgba(201,151,58,0.12); }
+  .piece-row .del-row { color:#b0aa98; cursor:pointer; font-size:14px; padding:0 4px; flex-shrink:0; }
+  .piece-row .del-row:hover { color:#c0392b; }
 
   .btn-add-row {
-    width:100%; background:transparent; border:1px dashed #2a2a2a; color:#666;
+    width:100%; background:transparent; border:1px dashed #ddd6c5; color:#8a8578;
     border-radius:10px; padding:9px; font-size:12px; cursor:pointer; margin-bottom:14px;
     font-family:inherit; transition:all .15s;
   }
-  .btn-add-row:hover { border-color:#FF5C2E; color:#FF5C2E; }
+  .btn-add-row:hover { border-color:#c9973a; color:#a07d2e; }
 
   .btn-main {
-    width:100%; background:#FF5C2E; color:#fff; border:none; border-radius:12px;
+    width:100%; background:#c9973a; color:#fff; border:none; border-radius:12px;
     padding:13px; font-size:14px; font-weight:800; cursor:pointer; margin-top:4px;
     transition:opacity .15s;
   }
   .btn-main:hover { opacity:.9; }
   .btn-secondary {
-    width:100%; background:rgba(212,175,55,0.12); border:1.5px solid #D4AF37; color:#D4AF37;
+    width:100%; background:rgba(201,151,58,0.10); border:1.5px solid #c9973a; color:#a07d2e;
     border-radius:10px; padding:10px; font-size:13px; font-weight:700; cursor:pointer; margin-top:8px;
     font-family:inherit;
   }
-  .btn-secondary:hover { background:rgba(212,175,55,0.22); }
+  .btn-secondary:hover { background:rgba(201,151,58,0.20); }
 
   .hint {
-    background:#0f0800; border:1px solid #2a1500; border-radius:10px;
-    padding:10px 12px; font-size:11px; color:#998866; margin-top:14px; line-height:1.5;
+    background:#f7f2e4; border:1px solid #e8dfc8; border-radius:10px;
+    padding:10px 12px; font-size:11px; color:#8a7a52; margin-top:14px; line-height:1.5;
   }
 
   /* SELECTED PIECE — פאנל צף עם שליטה מדויקת בחלק שנבחר */
   .sp-panel {
     position:fixed; top:20px; left:20px; z-index:500; width:220px;
-    background:#111; border:1px solid #1e1e1e; border-radius:16px; padding:16px;
-    box-shadow:0 8px 30px rgba(0,0,0,0.5);
+    background:#ffffff; border:1px solid #ddd6c5; border-radius:16px; padding:16px;
+    box-shadow:0 8px 30px rgba(0,0,0,0.12);
   }
   .sp-panel h3 {
     font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
-    color:#FF5C2E; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #1e1e1e;
+    color:#a07d2e; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #e8e2d2;
   }
-  #sp-empty { font-size:12px; color:#555; }
-  .sp-row { display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; color:#999; }
-  .sp-row b { color:#e8eaf0; font-weight:600; }
+  #sp-empty { font-size:12px; color:#8a8578; }
+  .sp-row { display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; color:#8a8578; }
+  .sp-row b { color:#2b2b26; font-weight:600; }
   .sp-status { text-align:center; font-size:12px; font-weight:700; border-radius:8px; padding:6px; margin:8px 0 12px; }
-  .sp-status.ok { background:rgba(80,200,120,0.12); color:#5ec87d; }
-  .sp-status.warn { background:rgba(255,150,50,0.14); color:#ff9632; }
+  .sp-status.ok { background:rgba(74,155,94,0.12); color:#3d8b4f; }
+  .sp-status.warn { background:rgba(192,57,43,0.12); color:#c0392b; }
   .sp-step-row { display:flex; gap:6px; margin-bottom:8px; }
   .sp-step {
-    flex:1; background:#0a0a0a; border:1px solid #222; color:#888; border-radius:7px;
+    flex:1; background:#faf8f3; border:1px solid #ddd6c5; color:#8a8578; border-radius:7px;
     font-size:11px; padding:5px 0; cursor:pointer; font-family:inherit;
   }
-  .sp-step.sel { border-color:#FF5C2E; color:#FF5C2E; background:rgba(255,92,46,0.1); }
+  .sp-step.sel { border-color:#c9973a; color:#a07d2e; background:rgba(201,151,58,0.12); }
   .sp-arrows {
     display:grid; grid-template-columns:32px 32px 32px; grid-template-rows:32px 32px 32px;
     gap:4px; justify-content:center; margin-bottom:12px;
   }
   .sp-arrows button {
-    background:#0a0a0a; border:1px solid #222; color:#ccc; border-radius:7px; cursor:pointer; font-size:13px;
+    background:#faf8f3; border:1px solid #ddd6c5; color:#5a5540; border-radius:7px; cursor:pointer; font-size:13px;
   }
-  .sp-arrows button:hover { border-color:#FF5C2E; color:#FF5C2E; }
+  .sp-arrows button:hover { border-color:#c9973a; color:#a07d2e; }
   .sp-rotate { display:flex; gap:5px; margin-bottom:12px; }
   .sp-rotate button {
-    flex:1; background:#0a0a0a; border:1px solid #222; color:#ccc; border-radius:7px;
+    flex:1; background:#faf8f3; border:1px solid #ddd6c5; color:#5a5540; border-radius:7px;
     font-size:11px; padding:6px 0; cursor:pointer; font-family:inherit;
   }
-  .sp-rotate button:hover { border-color:#FF5C2E; color:#FF5C2E; }
+  .sp-rotate button:hover { border-color:#c9973a; color:#a07d2e; }
   .sp-remove {
-    width:100%; background:rgba(255,68,68,0.1); border:1px solid #ff4444; color:#ff4444;
+    width:100%; background:rgba(192,57,43,0.08); border:1px solid #c0392b; color:#c0392b;
     border-radius:8px; padding:8px; font-size:12px; cursor:pointer; font-family:inherit;
   }
-  .sp-remove:hover { background:rgba(255,68,68,0.2); }
+  .sp-remove:hover { background:rgba(192,57,43,0.16); }
 
   /* CANVAS AREA */
   .stage-wrap {
-    background:#1a1a1a; border-radius:18px; padding:24px;
+    background:#e6e1d2; border-radius:18px; padding:24px;
     min-height:400px; overflow:auto;
   }
   .slab-block { display:flex; flex-direction:column; align-items:center; }
-  .stage-placeholder { color:#444; font-size:14px; }
+  .stage-placeholder { color:#a39d8a; font-size:14px; }
   .stage {
-    position:relative; background:#222; border-radius:8px;
+    position:relative; background:#ddd6c2; border-radius:8px;
     overflow:visible;
   }
   .slab-img { position:absolute; top:0; left:0; display:block; border-radius:8px; user-select:none; pointer-events:none; }
@@ -150,7 +150,7 @@
   }
   .piece:not(.cutout) .piece-label {
     position:absolute; bottom:-22px; left:50%; transform:translateX(-50%);
-    background:rgba(0,0,0,0.85); padding:2px 8px; border-radius:4px;
+    background:rgba(0,0,0,0.8); padding:2px 8px; border-radius:4px;
     white-space:nowrap; font-size:11px; border:1px solid #444;
   }
   .piece:not(.cutout) .piece-label::before {
@@ -158,100 +158,100 @@
   }
   .piece.snapping { border-width:2px !important; }
   .piece.pick-selected { outline:3px solid #FFD93D; outline-offset:2px; }
-  .piece.selected { outline:3px solid #5b6bff; outline-offset:2px; }
-  #pick-mode-btn.active, #seam-pick-btn.active { border-color:#FFD93D; color:#FFD93D; background:rgba(255,217,61,0.18); }
+  .piece.selected { outline:3px solid #4a90d9; outline-offset:2px; }
+  #pick-mode-btn.active, #seam-pick-btn.active { border-color:#c9973a; color:#a07d2e; background:rgba(201,151,58,0.16); }
   .snap-guide {
-    position:absolute; background:#FF5C2E; z-index:15; pointer-events:none;
+    position:absolute; background:#c9973a; z-index:15; pointer-events:none;
   }
   .piece .ctrl-btn {
     position:absolute; width:18px; height:18px; border-radius:50%;
     display:flex; align-items:center; justify-content:center; font-size:10px;
-    cursor:pointer; z-index:10; background:#111; border:2px solid #444; color:#aaa;
+    cursor:pointer; z-index:10; background:#ffffff; border:2px solid #ccc; color:#555;
   }
   /* כל הכפתורים בתוך גבול היחידה (לא צפים מעליה) — כך שלעולם לא יחרגו מהלוח, גם ביחידה שנוגעת בקצה */
-  .piece .rotate-btn { top:3px; left:3px; border-color:#FF5C2E; }
+  .piece .rotate-btn { top:3px; left:3px; border-color:#c9973a; }
   .piece .edit-btn { top:3px; left:25px; border-color:#5BC0EB; }
   .piece .del-btn { top:3px; right:3px; }
-  .piece .del-btn:hover { border-color:#ff4444; color:#ff4444; }
+  .piece .del-btn:hover { border-color:#c0392b; color:#c0392b; }
 
   .edit-popover {
     position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-    background:#111; border:1px solid #FF5C2E; border-radius:10px; padding:8px;
-    display:flex; gap:6px; align-items:center; z-index:20; box-shadow:0 4px 20px rgba(0,0,0,0.6);
+    background:#ffffff; border:1px solid #c9973a; border-radius:10px; padding:8px;
+    display:flex; gap:6px; align-items:center; z-index:20; box-shadow:0 4px 20px rgba(0,0,0,0.25);
   }
   .edit-popover input {
-    width:55px; font-size:12px; padding:6px 7px; background:#0a0a0a; color:#fff;
-    border:1px solid #2a2a2a; border-radius:6px; text-align:center;
+    width:55px; font-size:12px; padding:6px 7px; background:#faf8f3; color:#2b2b26;
+    border:1px solid #ddd6c5; border-radius:6px; text-align:center;
   }
   .edit-popover .confirm-btn {
-    background:#FF5C2E; border:none; border-radius:6px; color:#fff; font-size:13px;
+    background:#c9973a; border:none; border-radius:6px; color:#fff; font-size:13px;
     width:26px; height:26px; cursor:pointer; flex-shrink:0;
   }
 
   .dxf-zone {
-    border:2px dashed #2a1500; border-radius:14px; padding:18px; text-align:center;
-    cursor:pointer; transition:border-color .15s; margin-bottom:10px; background:#0f0800;
+    border:2px dashed #e8dfc8; border-radius:14px; padding:18px; text-align:center;
+    cursor:pointer; transition:border-color .15s; margin-bottom:10px; background:#f7f2e4;
   }
-  .dxf-zone:hover, .dxf-zone.drag { border-color:#FF5C2E; }
+  .dxf-zone:hover, .dxf-zone.drag { border-color:#c9973a; }
   .dxf-zone .icon { font-size:22px; margin-bottom:6px; }
-  .dxf-zone .txt { font-size:12px; color:#998866; }
+  .dxf-zone .txt { font-size:12px; color:#8a7a52; }
   #dxf-input { display:none; }
 
   .piece.seam-connected { box-shadow: 0 0 0 2px #FFD93D; }
   .seam-line { position:absolute; background:#FFD93D; z-index:16; pointer-events:none; border-radius:2px; box-shadow:0 0 8px #FFD93D; }
   .seam-label {
-    position:absolute; z-index:17; pointer-events:none; background:#1a1500; color:#FFD93D;
-    border:1px solid #FFD93D; border-radius:6px; padding:2px 8px; font-size:11px; font-weight:700;
+    position:absolute; z-index:17; pointer-events:none; background:#fff8e0; color:#a07d2e;
+    border:1px solid #d4af37; border-radius:6px; padding:2px 8px; font-size:11px; font-weight:700;
     white-space:nowrap;
   }
 
   .dxf-results { margin-top:10px; max-height:220px; overflow-y:auto; }
   .dxf-row {
-    display:flex; align-items:center; gap:8px; background:#0a0a0a;
-    border:1px solid #1e1e1e; border-radius:10px; padding:8px 10px; margin-bottom:6px;
+    display:flex; align-items:center; gap:8px; background:#faf8f3;
+    border:1px solid #e8e2d2; border-radius:10px; padding:8px 10px; margin-bottom:6px;
   }
-  .dxf-row input[type=checkbox] { accent-color:#FF5C2E; width:16px; height:16px; flex-shrink:0; }
+  .dxf-row input[type=checkbox] { accent-color:#c9973a; width:16px; height:16px; flex-shrink:0; }
   .dxf-row input[type=number] { width:60px; font-size:12px; padding:6px 8px; }
-  .dxf-row .x-sep { color:#444; font-size:12px; }
+  .dxf-row .x-sep { color:#b0aa98; font-size:12px; }
   .unit-toggle { display:flex; gap:6px; margin-bottom:10px; }
   .unit-btn {
-    flex:1; background:#0a0a0a; border:1px solid #222; border-radius:8px;
-    padding:7px; color:#666; font-size:12px; cursor:pointer; text-align:center;
+    flex:1; background:#faf8f3; border:1px solid #ddd6c5; border-radius:8px;
+    padding:7px; color:#8a8578; font-size:12px; cursor:pointer; text-align:center;
   }
-  .unit-btn.sel { background:rgba(255,92,46,0.1); border-color:#FF5C2E; color:#FF5C2E; font-weight:700; }
+  .unit-btn.sel { background:rgba(201,151,58,0.12); border-color:#c9973a; color:#a07d2e; font-weight:700; }
   .btn-add-dxf {
-    width:100%; background:#1a1a1a; border:1px solid #2a2a2a; color:#FF5C2E;
+    width:100%; background:#faf8f3; border:1px solid #ddd6c5; color:#a07d2e;
     border-radius:10px; padding:9px; font-size:12px; font-weight:700; cursor:pointer; margin-top:6px;
   }
 
   .slab-card {
-    border:1px solid #1e1e1e; border-radius:14px; padding:14px; margin-bottom:14px; background:#0d0d0d;
+    border:1px solid #e8e2d2; border-radius:14px; padding:14px; margin-bottom:14px; background:#ffffff;
   }
-  .slab-card h4 { font-size:12px; color:#FF5C2E; margin-bottom:10px; }
+  .slab-card h4 { font-size:12px; color:#a07d2e; margin-bottom:10px; }
   .bookmatch-row {
-    display:flex; align-items:center; gap:6px; font-size:12px; color:#998866; margin-bottom:10px;
+    display:flex; align-items:center; gap:6px; font-size:12px; color:#8a7a52; margin-bottom:10px;
   }
-  .bookmatch-row input { accent-color:#FF5C2E; width:14px; height:14px; }
+  .bookmatch-row input { accent-color:#c9973a; width:14px; height:14px; }
 
   .slab-block { margin-bottom:24px; }
-  .slab-block-title { font-size:12px; font-weight:700; color:#FF5C2E; margin-bottom:8px; letter-spacing:1px; }
+  .slab-block-title { font-size:12px; font-weight:700; color:#a07d2e; margin-bottom:8px; letter-spacing:1px; }
   .slab-toolbar { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
   .slab-toolbar button {
-    flex:1; min-width:140px; background:transparent; border:1px solid #2a2a2a; color:#888;
+    flex:1; min-width:140px; background:#ffffff; border:1px solid #ddd6c5; color:#5a5540;
     border-radius:8px; padding:8px; font-size:12px; cursor:pointer; font-family:inherit;
   }
-  .slab-toolbar button:hover { border-color:#FF5C2E; color:#FF5C2E; }
+  .slab-toolbar button:hover { border-color:#c9973a; color:#a07d2e; }
 
   .waiting-zone { margin-top:10px; }
-  .waiting-zone-label { font-size:12px; color:#FFD93D; margin-bottom:8px; }
+  .waiting-zone-label { font-size:12px; color:#a07d2e; margin-bottom:8px; }
   .waiting-stage {
-    position:relative; background:#1a1500; border:2px dashed #3a2a00; border-radius:12px;
+    position:relative; background:#f7f2e4; border:2px dashed #e8dfc8; border-radius:12px;
     min-height:140px; overflow-x:auto; overflow-y:visible; white-space:nowrap;
   }
 
   .piece .cross-slab-badge {
-    position:absolute; top:24px; left:3px; background:#1a1500; color:#FFD93D;
-    border:1px solid #FFD93D; border-radius:6px; padding:1px 6px; font-size:10px;
+    position:absolute; top:24px; left:3px; background:#fff8e0; color:#a07d2e;
+    border:1px solid #d4af37; border-radius:6px; padding:1px 6px; font-size:10px;
     white-space:nowrap; z-index:10;
   }
 </style>
@@ -641,24 +641,26 @@ function ensureCropModal() {
   if (document.getElementById('crop-modal')) return;
   const modal = document.createElement('div');
   modal.id = 'crop-modal';
-  modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center; flex-direction:column; gap:14px;';
+  modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;';
   modal.innerHTML = `
-    <div style="color:#fff; font-size:14px; max-width:80vw; text-align:center;">גרור את 4 הפינות הכתומות בדיוק לארבע הפינות האמיתיות של הלוח בתמונה — הכלי יישר את הטקסטורה שבפנים למלבן נקי, בלי הרקע מסביב</div>
+    <div style="background:#ffffff; border-radius:18px; padding:28px; max-width:88vw; display:flex; flex-direction:column; align-items:center; gap:14px; box-shadow:0 20px 60px rgba(0,0,0,0.35);">
+    <div style="color:#5a5540; font-size:14px; max-width:80vw; text-align:center;">גרור את 4 הפינות הכתומות בדיוק לארבע הפינות האמיתיות של הלוח בתמונה — הכלי יישר את הטקסטורה שבפנים למלבן נקי, בלי הרקע מסביב</div>
     <div id="crop-stage" style="position:relative; display:inline-block; line-height:0;">
       <img id="crop-img" style="display:block; max-width:80vw; max-height:65vh; user-select:none; pointer-events:none;">
       <svg id="crop-quad-svg" style="position:absolute; top:0; left:0; pointer-events:none;">
-        <polygon id="crop-quad-poly" style="fill:rgba(255,92,46,0.15); stroke:#FF5C2E; stroke-width:2;"></polygon>
+        <polygon id="crop-quad-poly" style="fill:rgba(201,151,58,0.15); stroke:#c9973a; stroke-width:2;"></polygon>
       </svg>
     </div>
-    <div style="display:flex; gap:14px; align-items:center; color:#ccc; font-size:12px;">
-      <label>אורך הלוח (מ"מ) <input type="number" id="crop-w-mm" style="width:80px; padding:5px 7px; border-radius:6px; border:1px solid #444; background:#1a1a1a; color:#fff;"></label>
-      <label>רוחב הלוח (מ"מ) <input type="number" id="crop-h-mm" style="width:80px; padding:5px 7px; border-radius:6px; border:1px solid #444; background:#1a1a1a; color:#fff;"></label>
-      <span id="crop-diag-hint" style="color:#4ECDC4"></span>
+    <div style="display:flex; gap:14px; align-items:center; color:#8a8578; font-size:12px;">
+      <label>אורך הלוח (מ"מ) <input type="number" id="crop-w-mm" style="width:80px; padding:5px 7px; border-radius:6px; border:1px solid #ddd6c5; background:#faf8f3; color:#2b2b26;"></label>
+      <label>רוחב הלוח (מ"מ) <input type="number" id="crop-h-mm" style="width:80px; padding:5px 7px; border-radius:6px; border:1px solid #ddd6c5; background:#faf8f3; color:#2b2b26;"></label>
+      <span id="crop-diag-hint" style="color:#3d8b4f"></span>
     </div>
     <div style="display:flex; gap:10px;">
-      <button id="crop-confirm-btn" style="background:#FF5C2E; border:none; border-radius:10px; color:#fff; padding:10px 22px; font-size:14px; cursor:pointer;">✓ אישור וייישור</button>
-      <button id="crop-skip-btn" style="background:transparent; border:1px solid #4ECDC4; border-radius:10px; color:#4ECDC4; padding:10px 22px; font-size:14px; cursor:pointer;">⏩ התמונה כבר נקייה — טען כמו שהיא</button>
-      <button id="crop-cancel-btn" style="background:transparent; border:1px solid #444; border-radius:10px; color:#aaa; padding:10px 22px; font-size:14px; cursor:pointer;">ביטול</button>
+      <button id="crop-confirm-btn" style="background:#c9973a; border:none; border-radius:10px; color:#fff; padding:10px 22px; font-size:14px; cursor:pointer;">✓ אישור וייישור</button>
+      <button id="crop-skip-btn" style="background:transparent; border:1px solid #3d8b4f; border-radius:10px; color:#3d8b4f; padding:10px 22px; font-size:14px; cursor:pointer;">⏩ התמונה כבר נקייה — טען כמו שהיא</button>
+      <button id="crop-cancel-btn" style="background:transparent; border:1px solid #ddd6c5; border-radius:10px; color:#8a8578; padding:10px 22px; font-size:14px; cursor:pointer;">ביטול</button>
+    </div>
     </div>
   `;
   document.body.appendChild(modal);
@@ -668,7 +670,7 @@ function ensureCropModal() {
     pin.className = 'crop-pin';
     pin.dataset.i = i;
     pin.textContent = PIN_LABELS[i];
-    pin.style.cssText = 'position:absolute; width:22px; height:22px; margin-left:-11px; margin-top:-11px; background:#FF5C2E; color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; cursor:grab; box-shadow:0 0 0 2px #fff;';
+    pin.style.cssText = 'position:absolute; width:22px; height:22px; margin-left:-11px; margin-top:-11px; background:#c9973a; color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; cursor:grab; box-shadow:0 0 0 2px #fff;';
     pin.addEventListener('mousedown', e => { e.preventDefault(); startPinDrag(e, i); });
     document.getElementById('crop-stage').appendChild(pin);
   }
