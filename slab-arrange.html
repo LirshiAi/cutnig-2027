@@ -140,13 +140,17 @@
 
   .piece {
     position:absolute; cursor:move; display:flex; align-items:center; justify-content:center;
-    border:1.5px solid; border-radius:2px; font-size:12px; font-weight:700; color:#fff;
+    border:3px solid; border-radius:2px; font-size:12px; font-weight:700; color:#fff;
     text-shadow: 0 1px 3px rgba(0,0,0,0.95); user-select:none; touch-action:none;
     background-blend-mode: normal;
+    /* טבעת לבנה מסביב לצבע החלק — כדי שהגבול יבלוט גם על תמונת שיש עמוסה וגם על רקע אחיד
+       (כמו אזור ההמתנה, שאין בו תמונה בכלל) — בלי הטבעת, קו דק נבלע ברקע ולא רואים אותו */
+    box-shadow: 0 0 0 1.5px rgba(255,255,255,0.95), 0 0 0 5px rgba(0,0,0,0.35);
+    background: rgba(255,255,255,0.08);
   }
   .piece.cutout {
     border-style:dashed; background: rgba(255,255,255,0.45) !important;
-    color:#222; text-shadow:none;
+    color:#222; text-shadow:none; box-shadow:none;
   }
   .piece:not(.cutout) .piece-label {
     position:absolute; bottom:-22px; left:50%; transform:translateX(-50%);
