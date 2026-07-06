@@ -999,6 +999,149 @@ function loadDxf(file) {
 
 // Minimal ASCII DXF parser — extracts LWPOLYLINE / POLYLINE+VERTEX / LINE entities
 // Pass debug=true to get back diagnostic info instead of just the shape list
+// קורא רצף pairs (code,value) מ-DXF החל מ-startIdx, ומחזיר רשימת "entities" גולמיים (טיפוסים +
+// נקודות 10/20 ו-11/21 + סגירות 70) עד שנתקלים בקוד 0 שהערך שלו נמצא ב-endMarkers.
+// עבור BLOCK/INSERT — שדות 10/20/2/41/42/50 נשמרים בנפרד (base point / שם בלוק / מיקום הכנסה /
+// קנה מידה / סיבוב) ולא נכנסים ל-points, כי המשמעות שלהם שם שונה לגמרי מקודקוד פוליליין.
+function extractRawEntities(pairs, startIdx, endMarkers) {
+  const rawEntities = [];
+  let current = null;
+  let i = startIdx;
+  for (; i < pairs.length; i++) {
+    const { code, value } = pairs[i];
+    if (code === 0) {
+      if (endMarkers.includes(value)) { if (current) rawEntities.push(current); i++; break; }
+      if (current) rawEntities.push(current);
+      current = { type: value, points: [], closed: false, _x: undefined, _x2: undefined, name: null };
+      continue;
+    }
+    if (!current) continue;
+    if (code === 2 && (current.type === 'BLOCK' || current.type === 'INSERT')) current.name = value;
+    else if (code === 10) {
+      if (current.type === 'INSERT') current.insX = parseFloat(value);
+      else if (current.type === 'BLOCK') current.baseX = parseFloat(value);
+      else current._x = parseFloat(value);
+    }
+    else if (code === 20) {
+      if (current.type === 'INSERT') current.insY = parseFloat(value);
+      else if (current.type === 'BLOCK') current.baseY = parseFloat(value);
+      else if (current._x !== undefined) { current.points.push([current._x, parseFloat(value)]); current._x = undefined; }
+    }
+    else if (code === 11) current._x2 = parseFloat(value);
+    else if (code === 21) {
+      if (current._x2 !== undefined) { current.points.push([current._x2, parseFloat(value)]); current._x2 = undefined; }
+    }
+    else if (code === 41 && current.type === 'INSERT') current.scaleX = parseFloat(value);
+    else if (code === 42 && current.type === 'INSERT') current.scaleY = parseFloat(value);
+    else if (code === 50 && current.type === 'INSERT') current.rot = parseFloat(value);
+    else if (code === 70) current.closed = (parseInt(value) & 1) === 1;
+  }
+  return { entities: rawEntities, nextIndex: i };
+}
+
+// מפרק את סעיף BLOCKS ל-מילון blockName → { baseX, baseY, entities }. קבצי CNC מקצועיים (כמו זה
+// שנבדק מול הכלי, 300K+ שורות) מגדירים את כל הגיאומטריה האמיתית כאן, ורק "מניחים" אותה
+// בסעיף ENTITIES דרך INSERT — בלי הפענוח הזה, כמעט כל הצורה נעלמת ונשארים רק כמה קווים בודדים
+function parseBlocksSection(pairs, startIdx) {
+  const flat = extractRawEntities(pairs, startIdx, ['ENDSEC']).entities;
+  const blocks = {};
+  let current = null;
+  flat.forEach(e => {
+    if (e.type === 'BLOCK') { current = { baseX: e.baseX || 0, baseY: e.baseY || 0, entities: [] }; blocks[e.name] = current; }
+    else if (e.type === 'ENDBLK') { current = null; }
+    else if (current) { current.entities.push(e); }
+  });
+  return blocks;
+}
+
+// ממיר רשימת raw entities (מ-ENTITIES או מתוך בלוק) לרשימת צורות סגורות {points, closed}.
+// מרכיב צורות סגורות מתוך "מרבך" של קטעי LINE בודדים, בלי תלות בסדר שלהם בקובץ —
+// בקבצי CNC אמיתיים (לא רק מדידות לייזר פשוטות) קטעי הקו של אותה צורה מפוזרים בכל מקום
+// בקובץ, לפעמים עם TEXT/INSERT אחרים ביניהם — לכן מחפשים לפי נקודות קצה תואמות (כמו פאזל),
+// לא לפי "הקטע הבא ברשימה". גילינו את זה כשקובץ CNC אמיתי (679/1176/2019/2719 מ"מ) לא נקרא
+// נכון בכלל למרות שה-DXF תקין — קטעי הקו שלו לא היו רציפים בקובץ.
+function stitchLineSegments(lineEntities) {
+  const TOL = 1;
+  const key = p => Math.round(p[0] / TOL) + ',' + Math.round(p[1] / TOL);
+  const segments = lineEntities.map(e => ({ a: e.points[0], b: e.points[1], used: false }));
+  const map = {};
+  segments.forEach(seg => {
+    [['a', seg.a], ['b', seg.b]].forEach(([which, pt]) => {
+      const k = key(pt);
+      (map[k] = map[k] || []).push({ seg, which });
+    });
+  });
+  const shapes = [];
+  segments.forEach(startSeg => {
+    if (startSeg.used) return;
+    startSeg.used = true;
+    const chain = [startSeg.a, startSeg.b];
+    let currentPt = startSeg.b;
+    let safety = 0;
+    while (safety++ < 20000) {
+      const candidates = (map[key(currentPt)] || []).filter(c => !c.seg.used);
+      if (!candidates.length) break;
+      const { seg, which } = candidates[0];
+      seg.used = true;
+      const nextPt = which === 'a' ? seg.b : seg.a; // הקצה השני של הקטע שנמצא
+      chain.push(nextPt);
+      currentPt = nextPt;
+      if (key(currentPt) === key(chain[0]) && chain.length >= 4) break;
+    }
+    if (chain.length >= 4 && key(chain[0]) === key(chain[chain.length - 1])) {
+      shapes.push({ points: chain, closed: true });
+    }
+  });
+  return shapes;
+}
+
+// INSERT נפתר רקורסיבית מול מילון ה-blocks (טרנספורמציה: קנה מידה → סיבוב → הזזה למיקום ההכנסה)
+function shapesFromRawEntities(rawEntities, blocks, depth) {
+  depth = depth || 0;
+  const shapes = [];
+  if (depth > 6) return shapes; // הגנה מפני בלוקים שמפנים זה לזה במעגל
+  const lineEntities = [];
+  let i = 0;
+  while (i < rawEntities.length) {
+    const e = rawEntities[i];
+    if (e.type === 'INSERT') {
+      const block = blocks[e.name];
+      if (block) {
+        const inner = shapesFromRawEntities(block.entities, blocks, depth + 1);
+        const sx = e.scaleX != null ? e.scaleX : 1;
+        const sy = e.scaleY != null ? e.scaleY : sx;
+        const rad = (e.rot || 0) * Math.PI / 180;
+        const cos = Math.cos(rad), sin = Math.sin(rad);
+        const insX = e.insX || 0, insY = e.insY || 0;
+        inner.forEach(shape => {
+          const points = shape.points.map(p => {
+            const lx = (p[0] - block.baseX) * sx, ly = (p[1] - block.baseY) * sy;
+            return [lx * cos - ly * sin + insX, lx * sin + ly * cos + insY];
+          });
+          shapes.push({ points, closed: shape.closed });
+        });
+      }
+      i++;
+    } else if (e.type === 'LWPOLYLINE' && e.points.length >= 3) {
+      shapes.push({ points: e.points, closed: e.closed });
+      i++;
+    } else if (e.type === 'POLYLINE') {
+      const pts = [];
+      let j = i + 1;
+      while (j < rawEntities.length && rawEntities[j].type === 'VERTEX') { pts.push(...rawEntities[j].points); j++; }
+      if (pts.length >= 3) shapes.push({ points: pts, closed: e.closed });
+      i = j;
+    } else if (e.type === 'LINE' && e.points.length === 2) {
+      lineEntities.push(e);
+      i++;
+    } else {
+      i++;
+    }
+  }
+  shapes.push(...stitchLineSegments(lineEntities));
+  return shapes;
+}
+
 function parseDXF(text, debug) {
   const info = { isTextDxf:false, foundEntitiesSection:false, entityTypesFound:[], shapes:[] };
 
@@ -1014,6 +1157,15 @@ function parseDXF(text, debug) {
     pairs.push({ code: parseInt(lines[i].trim()), value: lines[i+1] !== undefined ? lines[i+1].trim() : '' });
   }
 
+  // סעיף BLOCKS (אם קיים) — חייב להתפענח לפני ENTITIES כדי שאפשר יהיה לפענח הפניות INSERT אליו
+  let blocks = {};
+  for (let i = 0; i < pairs.length - 1; i++) {
+    if (pairs[i].code === 0 && pairs[i].value === 'SECTION' && pairs[i+1] && pairs[i+1].code === 2 && pairs[i+1].value === 'BLOCKS') {
+      blocks = parseBlocksSection(pairs, i + 2);
+      break;
+    }
+  }
+
   // find ENTITIES section
   let start = -1;
   for (let i = 0; i < pairs.length - 1; i++) {
@@ -1024,67 +1176,10 @@ function parseDXF(text, debug) {
   if (start === -1) return debug ? info : [];
   info.foundEntitiesSection = true;
 
-  const rawEntities = [];
-  let current = null;
-  for (let i = start; i < pairs.length; i++) {
-    const { code, value } = pairs[i];
-    if (code === 0) {
-      if (value === 'ENDSEC') break;
-      if (current) rawEntities.push(current);
-      current = { type: value, points: [], closed: false, _x: undefined };
-      continue;
-    }
-    if (!current) continue;
-    if (code === 10) current._x = parseFloat(value);
-    else if (code === 20) {
-      if (current._x !== undefined) { current.points.push([current._x, parseFloat(value)]); current._x = undefined; }
-    }
-    else if (code === 11) current._x2 = parseFloat(value);
-    else if (code === 21) {
-      if (current._x2 !== undefined) { current.points.push([current._x2, parseFloat(value)]); current._x2 = undefined; }
-    }
-    else if (code === 70) current.closed = (parseInt(value) & 1) === 1;
-  }
-  if (current) rawEntities.push(current);
-
+  const rawEntities = extractRawEntities(pairs, start, ['ENDSEC']).entities;
   info.entityTypesFound = [...new Set(rawEntities.map(e => e.type))];
 
-  // merge POLYLINE + following VERTEX entities
-  const shapes = [];
-  let i = 0;
-  while (i < rawEntities.length) {
-    const e = rawEntities[i];
-    if (e.type === 'LWPOLYLINE' && e.points.length >= 3) {
-      shapes.push({ points: e.points, closed: e.closed });
-      i++;
-    } else if (e.type === 'POLYLINE') {
-      const pts = [];
-      let j = i + 1;
-      while (j < rawEntities.length && rawEntities[j].type === 'VERTEX') { pts.push(...rawEntities[j].points); j++; }
-      if (pts.length >= 3) shapes.push({ points: pts, closed: e.closed });
-      i = j;
-    } else if (e.type === 'LINE' && e.points.length === 2) {
-      // מדידות לייזר (כמו Proliner) מייצאות לעיתים את היקף הצורה כרצף קטעי LINE בודדים —
-      // מחברים קטעים עוקבים שמתחילים בדיוק איפה הקודם נגמר, עד שהשרשרת נסגרת לצורה
-      const TOL = 1;
-      const near = (a, b) => Math.abs(a[0] - b[0]) < TOL && Math.abs(a[1] - b[1]) < TOL;
-      const chain = [e.points[0], e.points[1]];
-      let j = i + 1;
-      while (j < rawEntities.length && rawEntities[j].type === 'LINE' && rawEntities[j].points.length === 2) {
-        const seg = rawEntities[j];
-        if (!near(chain[chain.length - 1], seg.points[0])) break;
-        chain.push(seg.points[1]);
-        j++;
-        if (near(chain[chain.length - 1], chain[0])) break;
-      }
-      if (chain.length >= 4 && near(chain[chain.length - 1], chain[0])) {
-        shapes.push({ points: chain, closed: true });
-      }
-      i = j;
-    } else {
-      i++;
-    }
-  }
+  const shapes = shapesFromRawEntities(rawEntities, blocks);
 
   // compute bounding box per shape (in file units) — וגם שומרים את הנקודות עצמן (מנורמלות ל-0,0)
   // כדי שאפשר יהיה לצייר את הצורה האמיתית (מדרגה/זווית) ולא רק מלבן שמסתיר את הפרטים
