@@ -83,6 +83,48 @@
     padding:10px 12px; font-size:11px; color:#998866; margin-top:14px; line-height:1.5;
   }
 
+  /* SELECTED PIECE — פאנל צף עם שליטה מדויקת בחלק שנבחר */
+  .sp-panel {
+    position:fixed; top:20px; left:20px; z-index:500; width:220px;
+    background:#111; border:1px solid #1e1e1e; border-radius:16px; padding:16px;
+    box-shadow:0 8px 30px rgba(0,0,0,0.5);
+  }
+  .sp-panel h3 {
+    font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
+    color:#FF5C2E; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #1e1e1e;
+  }
+  #sp-empty { font-size:12px; color:#555; }
+  .sp-row { display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; color:#999; }
+  .sp-row b { color:#e8eaf0; font-weight:600; }
+  .sp-status { text-align:center; font-size:12px; font-weight:700; border-radius:8px; padding:6px; margin:8px 0 12px; }
+  .sp-status.ok { background:rgba(80,200,120,0.12); color:#5ec87d; }
+  .sp-status.warn { background:rgba(255,150,50,0.14); color:#ff9632; }
+  .sp-step-row { display:flex; gap:6px; margin-bottom:8px; }
+  .sp-step {
+    flex:1; background:#0a0a0a; border:1px solid #222; color:#888; border-radius:7px;
+    font-size:11px; padding:5px 0; cursor:pointer; font-family:inherit;
+  }
+  .sp-step.sel { border-color:#FF5C2E; color:#FF5C2E; background:rgba(255,92,46,0.1); }
+  .sp-arrows {
+    display:grid; grid-template-columns:32px 32px 32px; grid-template-rows:32px 32px 32px;
+    gap:4px; justify-content:center; margin-bottom:12px;
+  }
+  .sp-arrows button {
+    background:#0a0a0a; border:1px solid #222; color:#ccc; border-radius:7px; cursor:pointer; font-size:13px;
+  }
+  .sp-arrows button:hover { border-color:#FF5C2E; color:#FF5C2E; }
+  .sp-rotate { display:flex; gap:5px; margin-bottom:12px; }
+  .sp-rotate button {
+    flex:1; background:#0a0a0a; border:1px solid #222; color:#ccc; border-radius:7px;
+    font-size:11px; padding:6px 0; cursor:pointer; font-family:inherit;
+  }
+  .sp-rotate button:hover { border-color:#FF5C2E; color:#FF5C2E; }
+  .sp-remove {
+    width:100%; background:rgba(255,68,68,0.1); border:1px solid #ff4444; color:#ff4444;
+    border-radius:8px; padding:8px; font-size:12px; cursor:pointer; font-family:inherit;
+  }
+  .sp-remove:hover { background:rgba(255,68,68,0.2); }
+
   /* CANVAS AREA */
   .stage-wrap {
     background:#1a1a1a; border-radius:18px; padding:24px;
@@ -215,6 +257,35 @@
 </style>
 </head>
 <body>
+
+<div class="sp-panel" id="sp-panel">
+  <h3>חלק נבחר</h3>
+  <div id="sp-empty">לחץ על חלק בלוח כדי לבחור</div>
+  <div id="sp-content" style="display:none">
+    <div class="sp-row"><span>שם</span><b id="sp-label"></b></div>
+    <div class="sp-row"><span>לוח</span><b id="sp-slab"></b></div>
+    <div class="sp-row"><span>מידות</span><b id="sp-dims"></b></div>
+    <div class="sp-status" id="sp-bounds"></div>
+    <div class="sp-step-row">
+      <button class="sp-step" id="step-1" onclick="setNudgeStep(1)">1mm</button>
+      <button class="sp-step sel" id="step-5" onclick="setNudgeStep(5)">5mm</button>
+      <button class="sp-step" id="step-10" onclick="setNudgeStep(10)">10mm</button>
+    </div>
+    <div class="sp-arrows">
+      <div></div><button onclick="nudgeSelected(0,-1)">▲</button><div></div>
+      <button onclick="nudgeSelected(-1,0)">◀</button><div></div><button onclick="nudgeSelected(1,0)">▶</button>
+      <div></div><button onclick="nudgeSelected(0,1)">▼</button><div></div>
+    </div>
+    <div class="sp-rotate">
+      <button onclick="setPieceRotation(0)">0°</button>
+      <button onclick="setPieceRotation(90)">90°</button>
+      <button onclick="setPieceRotation(180)">180°</button>
+      <button onclick="setPieceRotation(270)">270°</button>
+    </div>
+    <button class="sp-remove" onclick="if(selectedPiece) deletePieceObj(selectedPiece)">✕ הסר חלק</button>
+  </div>
+</div>
+
 <div class="wrap">
 
   <div class="header">
@@ -226,7 +297,24 @@
 
     <!-- LEFT PANEL -->
     <div class="panel">
-      <h3>01 — לוחות (פלטות)</h3>
+      <h3>00 — פרויקט</h3>
+      <div class="field">
+        <label>שם הפרויקט</label>
+        <input type="text" id="project-name" placeholder="לדוגמה: מטבח ליאת">
+      </div>
+      <button class="btn-main" onclick="saveProjectPrompt()">💾 שמור פרויקט</button>
+      <div class="field" style="margin-top:10px">
+        <label>הפרויקטים השמורים שלי</label>
+        <select id="saved-projects-select"></select>
+      </div>
+      <button class="btn-secondary" onclick="loadProjectPrompt()">📂 טען פרויקט נבחר</button>
+      <button class="btn-secondary" onclick="deleteProjectPrompt()">🗑️ מחק פרויקט נבחר</button>
+      <button class="btn-add-row" onclick="exportProjectFile()">⬇️ ייצוא לקובץ (גיבוי)</button>
+      <button class="btn-add-row" onclick="document.getElementById('project-import-input').click()">⬆️ ייבוא מקובץ</button>
+      <input type="file" id="project-import-input" accept=".json" style="display:none">
+      <div class="hint">💡 השמירה היא בדפדפן הזה בלבד (localStorage). כדי להעביר פרויקט למחשב אחר — "ייצוא לקובץ" ואז "ייבוא מקובץ" שם.</div>
+
+      <h3 style="margin-top:20px">01 — לוחות (פלטות)</h3>
       <div id="slabs-config"></div>
       <button class="btn-add-row" onclick="addSlab()">+ הוסף לוח (פלטה נוספת)</button>
 
@@ -1071,6 +1159,81 @@ function renderShapeOverlay(piece) {
   svg.querySelector('polygon').setAttribute('points', piece.shapePoints.map(p => `${p[0] * scale},${p[1] * scale}`).join(' '));
 }
 
+// מסובב חלק ב-90° (בפועל, לא רק CSS transform) — אחרת תיבת המידות לא תואמת למה שנראה
+// על המסך, וזה גורם לחישובי "נכנס/לא נכנס ללוח" שגויים. משמש גם מכפתור הסיבוב על החלק
+// עצמו וגם מפאנל "חלק נבחר" (setPieceRotation).
+function rotatePiece90(piece) {
+  const el = piece.el;
+  const oldH = piece.h;
+  const tmp = piece.w; piece.w = piece.h; piece.h = tmp;
+  if (piece.shapePoints) piece.shapePoints = piece.shapePoints.map(p => [p[1], oldH - p[0]]);
+  piece.rotIndex = (piece.rotIndex + 1) % 4;
+  const scale = pxPerCm(piece.slabId);
+  el.style.width = (piece.w * scale) + 'px';
+  el.style.height = (piece.h * scale) + 'px';
+  piece.label = (piece.isCutout ? '🕳️ ' : '') + piece.w + '×' + piece.h + (piece.label.match(/\(\d\/\d\)/) ? ' ' + piece.label.match(/\(\d\/\d\)/)[0] : '');
+  el.querySelector('.piece-label').textContent = piece.label;
+  renderShapeOverlay(piece);
+  updateConnectionVisual(piece);
+}
+
+// ── SELECTED PIECE PANEL — נדידה מדויקת (מ"מ), סיבוב במעלות עגולות, סטטוס "בתוך/חורג מהלוח" ──
+let nudgeStepMm = 5;
+
+function setNudgeStep(mm) {
+  nudgeStepMm = mm;
+  document.querySelectorAll('.sp-step').forEach(b => b.classList.remove('sel'));
+  document.getElementById('step-' + mm).classList.add('sel');
+}
+
+function nudgeSelected(dx, dy) {
+  if (!selectedPiece) return;
+  const scale = pxPerCm(selectedPiece.slabId);
+  const stepPx = (nudgeStepMm / 10) * scale; // מ"מ → ס"מ → פיקסלים
+  const el = selectedPiece.el;
+  const newLeft = parseFloat(el.style.left) + dx * stepPx;
+  const newTop = parseFloat(el.style.top) + dy * stepPx;
+  el.style.left = newLeft + 'px';
+  el.style.top = newTop + 'px';
+  selectedPiece.x = newLeft; selectedPiece.y = newTop;
+  if (selectedPiece.connId) updateConnectionVisual(selectedPiece);
+  updateSelectedPiecePanel();
+}
+
+function setPieceRotation(targetDeg) {
+  if (!selectedPiece) return;
+  const targetIndex = (targetDeg / 90) % 4;
+  const steps = (targetIndex - selectedPiece.rotIndex + 4) % 4;
+  for (let i = 0; i < steps; i++) rotatePiece90(selectedPiece);
+  updateSelectedPiecePanel();
+}
+
+// בודק מול גבולות התמונה המלאה של הלוח (לא רק השטח הנטו) — זו השאלה "האם זה יוצא מהתמונה"
+function isPieceInBounds(piece) {
+  const slab = slabs.find(s => s.id === piece.slabId);
+  if (!slab || !slab.slabW) return true;
+  const scale = pxPerCm(piece.slabId);
+  const xCm = piece.x / scale, yCm = piece.y / scale;
+  const EPS = 0.05;
+  return xCm >= -EPS && yCm >= -EPS && (xCm + piece.w) <= slab.slabW + EPS && (yCm + piece.h) <= slab.slabH + EPS;
+}
+
+function updateSelectedPiecePanel() {
+  const empty = document.getElementById('sp-empty');
+  const content = document.getElementById('sp-content');
+  if (!selectedPiece) { empty.style.display = 'block'; content.style.display = 'none'; return; }
+  empty.style.display = 'none';
+  content.style.display = 'block';
+  const slab = slabs.find(s => s.id === selectedPiece.slabId);
+  document.getElementById('sp-label').textContent = selectedPiece.label;
+  document.getElementById('sp-slab').textContent = slab ? slab.name : '—';
+  document.getElementById('sp-dims').textContent = selectedPiece.w + '×' + selectedPiece.h + ' ס"מ';
+  const inBounds = isPieceInBounds(selectedPiece);
+  const statusEl = document.getElementById('sp-bounds');
+  statusEl.textContent = inBounds ? '✓ בתוך הלוח' : '⚠ חורג מהלוח';
+  statusEl.className = 'sp-status ' + (inBounds ? 'ok' : 'warn');
+}
+
 function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel, points) {
   const scale = pxPerCm(slabId);
   const id = pieceIdCounter++;
@@ -1095,7 +1258,7 @@ function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel,
 
   document.getElementById('stage-' + slabId).appendChild(el);
 
-  const piece = { id, el, w: wCm, h: hCm, x, y, rotated: false, color, label, isCutout: !!isCutout, connId: connId || null, slabId, shapePoints: points || null };
+  const piece = { id, el, w: wCm, h: hCm, x, y, rotated: false, rotIndex: 0, color, label, isCutout: !!isCutout, connId: connId || null, slabId, shapePoints: points || null };
   pieces.push(piece);
   renderShapeOverlay(piece);
 
@@ -1109,18 +1272,8 @@ function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel,
 
   el.querySelector('.rotate-btn').addEventListener('click', e => {
     e.stopPropagation();
-    // מחליפים בפועל רוחב/גובה (לא רק CSS transform חזותי) — אחרת תיבת המידות בפועל
-    // לא תואמת למה שנראה על המסך, וזה גורם לחישובי "נכנס/לא נכנס ללוח" שגויים
-    const oldH = piece.h;
-    const tmp = piece.w; piece.w = piece.h; piece.h = tmp;
-    if (piece.shapePoints) piece.shapePoints = piece.shapePoints.map(p => [p[1], oldH - p[0]]);
-    const scale = pxPerCm(piece.slabId);
-    el.style.width = (piece.w * scale) + 'px';
-    el.style.height = (piece.h * scale) + 'px';
-    piece.label = (piece.isCutout ? '🕳️ ' : '') + piece.w + '×' + piece.h + (piece.label.match(/\(\d\/\d\)/) ? ' ' + piece.label.match(/\(\d\/\d\)/)[0] : '');
-    el.querySelector('.piece-label').textContent = piece.label;
-    renderShapeOverlay(piece);
-    updateConnectionVisual(piece);
+    rotatePiece90(piece);
+    updateSelectedPiecePanel();
   });
 
   el.querySelector('.edit-btn').addEventListener('click', e => {
@@ -1333,6 +1486,7 @@ function arrangeOptimal(slabId, silent = false) {
       const oldH = p.h;
       const t = p.w; p.w = p.h; p.h = t;
       if (p.shapePoints) p.shapePoints = p.shapePoints.map(pt => [pt[1], oldH - pt[0]]);
+      p.rotIndex = (p.rotIndex + 1) % 4;
     }
     p.rotated = false;
     p.el.style.transform = 'none';
@@ -1363,6 +1517,7 @@ function arrangeOptimal(slabId, silent = false) {
       : '');
 
   moveOverflowToNextSlab(overflow, slabId);
+  updateSelectedPiecePanel();
 }
 
 function moveOverflowToNextSlab(list, fromSlabId) {
@@ -1562,6 +1717,7 @@ function makeDraggable(el, piece) {
       el.style.top = newTop + 'px';
       piece.x = newLeft; piece.y = newTop;
       if (piece.connId) updateConnectionVisual(piece);
+      if (selectedPiece && selectedPiece.id === piece.id) updateSelectedPiecePanel();
     }
 
     function mouseMove(e) { onMove(e.clientX, e.clientY); }
@@ -1569,6 +1725,7 @@ function makeDraggable(el, piece) {
     function stop() {
       el.classList.remove('snapping');
       if (piece.connId) updateConnectionVisual(piece);
+      if (selectedPiece && selectedPiece.id === piece.id) updateSelectedPiecePanel();
       document.removeEventListener('mousemove', mouseMove);
       document.removeEventListener('mouseup', stop);
       document.removeEventListener('touchmove', touchMove);
@@ -1601,6 +1758,159 @@ function clearAll() {
   document.getElementById('waiting-stage').style.width = '';
   refreshUnitSelect();
 }
+
+// ── PROJECT SAVE / LOAD — localStorage (בדפדפן הזה) + ייצוא/ייבוא קובץ JSON (נייד בין מחשבים) ──
+// אין שרת בכלי הזה — "שמירה" אמיתית מתאפשרת רק כי כל תמונות הלוח כבר שמורות כ-data URL
+// (Image.src) מרגע ההעלאה/החיתוך, כך שאפשר לשרשר את כל המצב (כולל תמונות) לאובייקט JSON יחיד.
+const PROJECTS_INDEX_KEY = 'slabarrange_projects_index';
+
+function getSavedProjectNames() {
+  try { return JSON.parse(localStorage.getItem(PROJECTS_INDEX_KEY) || '[]'); }
+  catch (e) { return []; }
+}
+
+function refreshSavedProjectsSelect() {
+  const sel = document.getElementById('saved-projects-select');
+  const names = getSavedProjectNames();
+  sel.innerHTML = names.length
+    ? names.map(n => `<option value="${n}">${n}</option>`).join('')
+    : '<option value="">אין פרויקטים שמורים</option>';
+}
+
+function serializeProject() {
+  return {
+    version: 1,
+    slabIdCounter, pieceIdCounter,
+    slabs: slabs.map(s => ({
+      id: s.id, name: s.name, slabW: s.slabW, slabH: s.slabH,
+      material: (document.getElementById('slab-material-' + s.id) || {}).value || 'quartz',
+      bookMatchOf: s.bookMatchOf || null,
+      offsetX: (document.getElementById('offset-x-' + s.id) || {}).value || 0,
+      offsetY: (document.getElementById('offset-y-' + s.id) || {}).value || 0,
+      imgSrc: s.img ? s.img.src : null,
+      originalImgSrc: s.originalImg ? s.originalImg.src : null
+    })),
+    pieces: pieces.map(p => ({
+      w: p.w, h: p.h, x: p.x, y: p.y, color: p.color, label: p.label,
+      isCutout: p.isCutout, connId: p.connId, slabId: p.slabId,
+      shapePoints: p.shapePoints, rotIndex: p.rotIndex
+    }))
+  };
+}
+
+function saveProjectPrompt() {
+  const nameInput = document.getElementById('project-name');
+  const name = (nameInput.value || '').trim();
+  if (!name) { alert('תן שם לפרויקט קודם'); return; }
+  const names = getSavedProjectNames();
+  if (!names.includes(name)) { names.push(name); localStorage.setItem(PROJECTS_INDEX_KEY, JSON.stringify(names)); }
+  localStorage.setItem('slabarrange_project_' + name, JSON.stringify(serializeProject()));
+  refreshSavedProjectsSelect();
+  document.getElementById('saved-projects-select').value = name;
+  alert('הפרויקט "' + name + '" נשמר בדפדפן הזה ✓');
+}
+
+function loadProjectPrompt() {
+  const name = document.getElementById('saved-projects-select').value;
+  if (!name) return;
+  const raw = localStorage.getItem('slabarrange_project_' + name);
+  if (!raw) { alert('הפרויקט לא נמצא'); return; }
+  if (!confirm('לטעון את "' + name + '"? כל מה שיש כרגע על המסך יוחלף.')) return;
+  loadProjectData(JSON.parse(raw));
+  document.getElementById('project-name').value = name;
+}
+
+function deleteProjectPrompt() {
+  const name = document.getElementById('saved-projects-select').value;
+  if (!name) return;
+  if (!confirm('למחוק את הפרויקט השמור "' + name + '"? זה לא ניתן לביטול.')) return;
+  localStorage.removeItem('slabarrange_project_' + name);
+  const names = getSavedProjectNames().filter(n => n !== name);
+  localStorage.setItem(PROJECTS_INDEX_KEY, JSON.stringify(names));
+  refreshSavedProjectsSelect();
+}
+
+function exportProjectFile() {
+  const name = (document.getElementById('project-name').value || 'project').trim() || 'project';
+  const blob = new Blob([JSON.stringify(serializeProject())], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.download = name + '.slabproject.json';
+  link.href = URL.createObjectURL(blob);
+  link.click();
+}
+
+document.getElementById('project-import-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    if (!confirm('לטעון פרויקט מהקובץ? כל מה שיש כרגע על המסך יוחלף.')) return;
+    try {
+      loadProjectData(JSON.parse(ev.target.result));
+    } catch (err) {
+      alert('קובץ לא תקין: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+async function loadProjectData(data) {
+  pieces.forEach(p => clearSeamVisual(p.connId));
+  pieces = [];
+  slabs = [];
+  selectedPiece = null;
+  document.getElementById('slabs-config').innerHTML = '';
+  document.getElementById('stages-container').innerHTML = '';
+  document.getElementById('waiting-zone').style.display = 'none';
+  document.getElementById('waiting-stage').innerHTML = '';
+  document.getElementById('waiting-stage').style.width = '';
+  updateSelectedPiecePanel();
+
+  slabIdCounter = data.slabIdCounter || 0;
+  pieceIdCounter = data.pieceIdCounter || 0;
+
+  for (const sd of (data.slabs || [])) {
+    const slab = { id: sd.id, name: sd.name, slabW: sd.slabW, slabH: sd.slabH, img: null, lastSlabW: null, bookMatchOf: sd.bookMatchOf || null };
+    slabs.push(slab);
+    renderSlabConfig(slab);
+    renderSlabStage(slab);
+    document.getElementById('slab-w-' + slab.id).value = sd.slabW;
+    document.getElementById('slab-h-' + slab.id).value = sd.slabH;
+    const matEl = document.getElementById('slab-material-' + slab.id);
+    if (matEl) matEl.value = sd.material || 'quartz';
+
+    if (sd.imgSrc) {
+      await new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => { applySlabImage(slab, img, 'משוחזר מפרויקט שמור'); resolve(); };
+        img.src = sd.imgSrc;
+      });
+    }
+    if (sd.originalImgSrc) {
+      await new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => { slab.originalImg = img; resolve(); };
+        img.src = sd.originalImgSrc;
+      });
+    }
+    const oxEl = document.getElementById('offset-x-' + slab.id), oyEl = document.getElementById('offset-y-' + slab.id);
+    if (oxEl) oxEl.value = sd.offsetX || 0;
+    if (oyEl) oyEl.value = sd.offsetY || 0;
+  }
+
+  refreshSlabSelects();
+
+  (data.pieces || []).forEach(pd => {
+    const piece = createPiece(pd.w, pd.h, pd.color, pd.x, pd.y, pd.isCutout, pd.slabId, pd.connId, null, pd.shapePoints);
+    piece.label = pd.label;
+    piece.el.querySelector('.piece-label').textContent = pd.label;
+    piece.rotIndex = pd.rotIndex || 0;
+  });
+
+  pieces.filter(p => p.connId).forEach(updateConnectionVisual);
+}
+
+refreshSavedProjectsSelect();
 
 // מנקה רק את החלקים שהונחו על לוח ספציפי — בלי לגעת בלוחות אחרים או ברשימת המחשבון,
 // כך שאפשר להעביר את אותה רשימה ללוח הבא בלי שהחלקים הקודמים יישארו על הלוח הקודם
@@ -1759,6 +2069,7 @@ function selectPiece(piece) {
   if (selectedPiece && selectedPiece.el) selectedPiece.el.classList.remove('selected');
   selectedPiece = piece;
   if (piece) piece.el.classList.add('selected');
+  updateSelectedPiecePanel();
 }
 
 function deletePieceObj(piece) {
@@ -1767,6 +2078,7 @@ function deletePieceObj(piece) {
   pieces = pieces.filter(p => p.id !== piece.id);
   if (selectedPiece && selectedPiece.id === piece.id) selectedPiece = null;
   refreshUnitSelect();
+  updateSelectedPiecePanel();
 }
 
 document.addEventListener('keydown', e => {
