@@ -55,8 +55,27 @@
     align-items:center; justify-content:center;
   }
   .piece-row .cutout-toggle.active { border-color:#c9973a; color:#c9973a; background:rgba(201,151,58,0.12); }
+  .piece-row .shape-btn {
+    flex-shrink:0; width:26px; height:26px; border-radius:7px; border:1px solid #ddd6c5;
+    background:#faf8f3; color:#8a8578; font-size:12px; cursor:pointer; display:flex;
+    align-items:center; justify-content:center;
+  }
+  .piece-row .shape-btn.has-shape { border-color:#5BC0EB; color:#3b8fae; background:rgba(91,192,235,0.12); }
   .piece-row .del-row { color:#b0aa98; cursor:pointer; font-size:14px; padding:0 4px; flex-shrink:0; }
   .piece-row .del-row:hover { color:#c0392b; }
+
+  /* SHAPE BUILDER — יצירת חלק בצורה לא-מלבנית (L, פינות חתוכות, שיפוע, חריץ, מותאם אישית) */
+  .shape-corner-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+  .shape-corner-cell {
+    border:1px solid #ddd6c5; border-radius:10px; padding:8px; background:#faf8f3;
+  }
+  .shape-corner-cell.active { border-color:#c9973a; background:rgba(201,151,58,0.08); }
+  .shape-corner-cell label.chk { display:flex; align-items:center; gap:6px; font-size:12px; color:#5a5540; font-weight:700; margin-bottom:6px; }
+  .shape-corner-cell .dims { display:flex; gap:6px; }
+  .shape-corner-cell .dims input { width:100%; font-size:12px; padding:6px 7px; }
+  .shape-field-row { display:flex; gap:10px; align-items:center; margin-bottom:10px; }
+  .shape-field-row label { font-size:12px; color:#5a5540; display:flex; flex-direction:column; gap:4px; flex:1; }
+  .shape-field-row input, .shape-field-row select { font-size:13px; padding:8px 9px; border-radius:8px; border:1px solid #ddd6c5; background:#faf8f3; }
 
   .btn-add-row {
     width:100%; background:transparent; border:1px dashed #ddd6c5; color:#8a8578;
@@ -437,13 +456,303 @@ function addRow(presetW, presetH, points) {
     <input type="number" placeholder="רוחב" id="row-h-${rowCount}" value="${presetH || ''}">
     <input type="number" placeholder="כמ׳" id="row-q-${rowCount}" value="1" style="max-width:46px">
     <span class="cutout-toggle" id="cutout-${rowCount}" title="סמן כפתח (כיור/כיריים)" onclick="toggleCutout(${rowCount})">🕳️</span>
+    <span class="shape-btn${points ? ' has-shape' : ''}" id="shape-btn-${rowCount}" title="הגדר צורה מיוחדת (לא מלבן) — L, פינה חתוכה, שיפוע, חריץ" onclick="openShapeBuilder(${rowCount})">${points ? '📐' : '🔲'}</span>
     <span class="del-row" onclick="removeRow(${rowCount})">✕</span>
-    ${points ? '<span title="נשמרה הצורה האמיתית מה-DXF (לא רק מלבן)" style="font-size:13px">📐</span>' : ''}
   `;
   row.dataset.color = color;
   row.dataset.cutout = 'false';
   if (points) row.dataset.points = JSON.stringify(points);
   calc.appendChild(row);
+}
+
+function updateShapeBtn(n) {
+  const btn = document.getElementById('shape-btn-' + n);
+  if (!btn) return;
+  const row = document.getElementById('row-' + n);
+  const hasShape = !!row.dataset.points;
+  btn.classList.toggle('has-shape', hasShape);
+  btn.textContent = hasShape ? '📐' : '🔲';
+}
+
+// ── SHAPE BUILDER — יצירת חלק בצורה לא-מלבנית ידנית (בלי DXF) ────────────
+// כל בונה צורה מחזיר פוליגון סגור בס"מ בתוך תיבה תוחמת W×H, יחסית לפינה
+// (0,0) שמאלית-עליונה, X ימינה, Y למטה — בדיוק כמו shapePoints שמגיעים מ-DXF
+// (ר' addDxfToCalc / renderShapeOverlay / rotatePiece90), כדי שכל שאר המערכת
+// (סיבוב, גרירה, ציור, ייצוא DXF) תעבוד על צורה ידנית בדיוק כמו על צורה שיובאה.
+
+// פינות חתוכות (מכליל L-שייפ: פינה אחת חתוכה = L; כמה פינות = צורות ייחודיות יותר)
+function buildCornerCutPoints(W, H, cuts) {
+  const tl = cuts.tl || { w: 0, h: 0 }, tr = cuts.tr || { w: 0, h: 0 };
+  const br = cuts.br || { w: 0, h: 0 }, bl = cuts.bl || { w: 0, h: 0 };
+  const pts = [];
+  if (tl.w > 0 && tl.h > 0) { pts.push([0, tl.h], [tl.w, tl.h], [tl.w, 0]); } else pts.push([0, 0]);
+  if (tr.w > 0 && tr.h > 0) { pts.push([W - tr.w, 0], [W - tr.w, tr.h], [W, tr.h]); } else pts.push([W, 0]);
+  if (br.w > 0 && br.h > 0) { pts.push([W, H - br.h], [W - br.w, H - br.h], [W - br.w, H]); } else pts.push([W, H]);
+  if (bl.w > 0 && bl.h > 0) { pts.push([bl.w, H], [bl.w, H - bl.h], [0, H - bl.h]); } else pts.push([0, H]);
+  return pts;
+}
+
+// פינה משופעת 45° (טרפז) — כמו קצה "שבור" כדי שלא תהיה פינה חדה בולטת
+function buildChamferPoints(W, H, cuts) {
+  const tl = cuts.tl || { w: 0, h: 0 }, tr = cuts.tr || { w: 0, h: 0 };
+  const br = cuts.br || { w: 0, h: 0 }, bl = cuts.bl || { w: 0, h: 0 };
+  const pts = [];
+  if (tl.w > 0 || tl.h > 0) { pts.push([0, tl.h], [tl.w, 0]); } else pts.push([0, 0]);
+  if (tr.w > 0 || tr.h > 0) { pts.push([W - tr.w, 0], [W, tr.h]); } else pts.push([W, 0]);
+  if (br.w > 0 || br.h > 0) { pts.push([W, H - br.h], [W - br.w, H]); } else pts.push([W, H]);
+  if (bl.w > 0 || bl.h > 0) { pts.push([bl.w, H], [0, H - bl.h]); } else pts.push([0, H]);
+  return pts;
+}
+
+// חריץ באמצע צלע (לא בפינה) — לדוגמה מקום למדיח/רגל ארון/צנרת
+function buildEdgeNotchPoints(W, H, side, offset, notchW, notchD) {
+  if (side === 'top') return [[0, 0], [offset, 0], [offset, notchD], [offset + notchW, notchD], [offset + notchW, 0], [W, 0], [W, H], [0, H]];
+  if (side === 'right') return [[0, 0], [W, 0], [W, offset], [W - notchD, offset], [W - notchD, offset + notchW], [W, offset + notchW], [W, H], [0, H]];
+  if (side === 'bottom') return [[0, 0], [W, 0], [W, H], [offset + notchW, H], [offset + notchW, H - notchD], [offset, H - notchD], [offset, H], [0, H]];
+  return [[0, 0], [W, 0], [W, H], [0, H], [0, offset + notchW], [notchD, offset + notchW], [notchD, offset], [0, offset]]; // left
+}
+
+// מותאם אישית — רשימת נקודות חופשית (X,Y בס"מ, שורה לכל נקודה), לצורות שלא מכוסות בתבניות
+function parseCustomPoints(text) {
+  const pts = text.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const m = l.split(',').map(v => parseFloat(v.trim()));
+    return (m.length === 2 && !isNaN(m[0]) && !isNaN(m[1])) ? m : null;
+  });
+  if (pts.some(p => !p) || pts.length < 3) return null;
+  const minX = Math.min(...pts.map(p => p[0])), minY = Math.min(...pts.map(p => p[1]));
+  return pts.map(p => [p[0] - minX, p[1] - minY]); // מנרמל כך שהפינה השמאלית-עליונה תהיה (0,0)
+}
+
+let shapeBuilderRow = null;
+
+function ensureShapeModal() {
+  if (document.getElementById('shape-modal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'shape-modal';
+  modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:#ffffff; border-radius:18px; padding:24px; width:520px; max-width:92vw; max-height:88vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.35); display:flex; flex-direction:column; gap:12px;">
+      <h3 style="font-size:15px; font-weight:800; color:#2b2b26; margin:0;">🔷 הגדרת צורה מיוחדת לחלק</h3>
+      <div class="shape-field-row">
+        <label>סוג צורה
+          <select id="shape-type" onchange="onShapeTypeChange()">
+            <option value="corners">פינות חתוכות (L-שייפ / כמה פינות)</option>
+            <option value="chamfer">פינה משופעת 45°</option>
+            <option value="notch">חריץ באמצע צלע</option>
+            <option value="custom">מותאם אישית — רשימת נקודות</option>
+          </select>
+        </label>
+      </div>
+      <div class="shape-field-row" id="shape-wh-row">
+        <label>אורך כולל W (ס"מ) <input type="number" id="shape-W" value="100" oninput="renderShapePreview()"></label>
+        <label>רוחב כולל H (ס"מ) <input type="number" id="shape-H" value="60" oninput="renderShapePreview()"></label>
+      </div>
+
+      <div id="shape-panel-corners">
+        <div class="hint" style="margin-top:0">סמן אילו פינות חתוכות ותן לכל אחת רוחב/גובה זיז. פינה אחת = L-שייפ. כמה פינות = צורה ייחודית (למשל אי צמוד לשני קירות).</div>
+        <div class="shape-corner-grid">
+          ${['tl','tr','bl','br'].map(k => `
+            <div class="shape-corner-cell" id="corner-cell-${k}">
+              <label class="chk"><input type="checkbox" id="corner-on-${k}" onchange="onCornerToggle('${k}')"> ${({tl:'פינה שמאל-עליונה',tr:'פינה ימין-עליונה',bl:'פינה שמאל-תחתונה',br:'פינה ימין-תחתונה'})[k]}</label>
+              <div class="dims">
+                <input type="number" id="corner-w-${k}" placeholder="רוחב זיז" disabled oninput="renderShapePreview()">
+                <input type="number" id="corner-h-${k}" placeholder="גובה זיז" disabled oninput="renderShapePreview()">
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div id="shape-panel-notch" style="display:none">
+        <div class="shape-field-row">
+          <label>באיזו צלע
+            <select id="notch-side" onchange="renderShapePreview()">
+              <option value="top">עליונה</option>
+              <option value="bottom">תחתונה</option>
+              <option value="left">שמאלית</option>
+              <option value="right">ימנית</option>
+            </select>
+          </label>
+        </div>
+        <div class="shape-field-row">
+          <label>מרחק מתחילת הצלע (ס"מ) <input type="number" id="notch-offset" value="10" oninput="renderShapePreview()"></label>
+          <label>רוחב החריץ (ס"מ) <input type="number" id="notch-w" value="10" oninput="renderShapePreview()"></label>
+          <label>עומק החריץ (ס"מ) <input type="number" id="notch-d" value="5" oninput="renderShapePreview()"></label>
+        </div>
+      </div>
+
+      <div id="shape-panel-custom" style="display:none">
+        <div class="hint" style="margin-top:0">שורה לכל נקודה, בפורמט X,Y בס"מ (לפי סדר היקפי — עם/נגד כיוון השעון, בלי לחצות את עצמו). המערכת תמרכז אוטומטית את הפינה השמאלית-עליונה ל-(0,0).</div>
+        <textarea id="custom-points" rows="6" style="width:100%; font-size:12px; padding:8px; border-radius:8px; border:1px solid #ddd6c5; background:#faf8f3; font-family:monospace;" placeholder="0,0
+100,0
+100,40
+60,40
+60,60
+0,60" oninput="renderShapePreview()"></textarea>
+      </div>
+
+      <div style="display:flex; justify-content:center; padding:6px 0;">
+        <svg id="shape-preview-svg" width="260" height="180" style="background:#f7f2e4; border:1px solid #e8dfc8; border-radius:10px;">
+          <polygon id="shape-preview-poly" fill="rgba(201,151,58,0.18)" stroke="#c9973a" stroke-width="2"></polygon>
+        </svg>
+      </div>
+      <div id="shape-error" style="color:#c0392b; font-size:12px; min-height:16px;"></div>
+
+      <div style="display:flex; gap:10px;">
+        <button class="btn-main" style="margin-top:0" onclick="applyShapeBuilder()">✓ החל צורה</button>
+        <button class="btn-secondary" style="margin-top:0" onclick="clearShapeBuilder()">🔲 הסר צורה (חזרה למלבן)</button>
+        <button style="background:transparent; border:1px solid #ddd6c5; border-radius:10px; color:#8a8578; padding:10px 18px; font-size:13px; cursor:pointer;" onclick="closeShapeModal()">ביטול</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function onShapeTypeChange() {
+  const type = document.getElementById('shape-type').value;
+  document.getElementById('shape-panel-corners').style.display = type === 'corners' ? 'block' : 'none';
+  document.getElementById('shape-panel-notch').style.display = type === 'notch' ? 'block' : 'none';
+  document.getElementById('shape-panel-custom').style.display = type === 'custom' ? 'block' : 'none';
+  document.getElementById('shape-wh-row').style.display = type === 'custom' ? 'none' : 'flex';
+  renderShapePreview();
+}
+
+function onCornerToggle(k) {
+  const on = document.getElementById('corner-on-' + k).checked;
+  document.getElementById('corner-w-' + k).disabled = !on;
+  document.getElementById('corner-h-' + k).disabled = !on;
+  document.getElementById('corner-cell-' + k).classList.toggle('active', on);
+  renderShapePreview();
+}
+
+// קורא את השדות הנוכחיים בטופס ובונה {points, w, h} — מחזיר null אם הקלט לא תקין/לא שלם
+function readShapeBuilderState() {
+  const type = document.getElementById('shape-type').value;
+  if (type === 'custom') {
+    const pts = parseCustomPoints(document.getElementById('custom-points').value);
+    if (!pts) return null;
+    const w = Math.max(...pts.map(p => p[0])), h = Math.max(...pts.map(p => p[1]));
+    if (!(w > 0) || !(h > 0)) return null;
+    return { points: pts, w, h };
+  }
+  const W = parseFloat(document.getElementById('shape-W').value);
+  const H = parseFloat(document.getElementById('shape-H').value);
+  if (!(W > 0) || !(H > 0)) return null;
+  if (type === 'corners' || type === 'chamfer') {
+    const cuts = {};
+    let any = false;
+    ['tl','tr','br','bl'].forEach(k => {
+      if (document.getElementById('corner-on-' + k).checked) {
+        const w = parseFloat(document.getElementById('corner-w-' + k).value) || 0;
+        const h = parseFloat(document.getElementById('corner-h-' + k).value) || 0;
+        if (w > 0 && w < W && h > 0 && h < H) { cuts[k] = { w, h }; any = true; }
+      }
+    });
+    if (!any) return null;
+    const points = type === 'corners' ? buildCornerCutPoints(W, H, cuts) : buildChamferPoints(W, H, cuts);
+    return { points, w: W, h: H };
+  }
+  if (type === 'notch') {
+    const side = document.getElementById('notch-side').value;
+    const offset = parseFloat(document.getElementById('notch-offset').value) || 0;
+    const nw = parseFloat(document.getElementById('notch-w').value) || 0;
+    const nd = parseFloat(document.getElementById('notch-d').value) || 0;
+    const along = (side === 'top' || side === 'bottom') ? W : H;
+    const depthLimit = (side === 'top' || side === 'bottom') ? H : W;
+    if (!(nw > 0) || !(nd > 0) || nd >= depthLimit || offset < 0 || (offset + nw) >= along) return null;
+    return { points: buildEdgeNotchPoints(W, H, side, offset, nw, nd), w: W, h: H };
+  }
+  return null;
+}
+
+function renderShapePreview() {
+  const errEl = document.getElementById('shape-error');
+  const state = readShapeBuilderState();
+  const poly = document.getElementById('shape-preview-poly');
+  if (!state) { poly.setAttribute('points', ''); errEl.textContent = 'מידות לא שלמות/לא תקינות עדיין'; return; }
+  errEl.textContent = '';
+  const svg = document.getElementById('shape-preview-svg');
+  const pad = 16, availW = 260 - pad * 2, availH = 180 - pad * 2;
+  const scale = Math.min(availW / state.w, availH / state.h);
+  const offX = (260 - state.w * scale) / 2, offY = (180 - state.h * scale) / 2;
+  poly.setAttribute('points', state.points.map(p => `${offX + p[0] * scale},${offY + p[1] * scale}`).join(' '));
+}
+
+function openShapeBuilder(rowNum) {
+  ensureShapeModal();
+  shapeBuilderRow = rowNum;
+  const row = document.getElementById('row-' + rowNum);
+  const cfg = row.dataset.shapeCfg ? JSON.parse(row.dataset.shapeCfg) : null;
+
+  document.getElementById('shape-type').value = cfg ? cfg.type : 'corners';
+  document.getElementById('shape-W').value = cfg ? cfg.W : (parseFloat(document.getElementById('row-w-' + rowNum).value) || 100);
+  document.getElementById('shape-H').value = cfg ? cfg.H : (parseFloat(document.getElementById('row-h-' + rowNum).value) || 60);
+  ['tl','tr','br','bl'].forEach(k => {
+    const c = cfg && cfg.cuts && cfg.cuts[k];
+    document.getElementById('corner-on-' + k).checked = !!c;
+    document.getElementById('corner-w-' + k).value = c ? c.w : '';
+    document.getElementById('corner-h-' + k).value = c ? c.h : '';
+    document.getElementById('corner-w-' + k).disabled = !c;
+    document.getElementById('corner-h-' + k).disabled = !c;
+    document.getElementById('corner-cell-' + k).classList.toggle('active', !!c);
+  });
+  document.getElementById('notch-side').value = cfg && cfg.notch ? cfg.notch.side : 'bottom';
+  document.getElementById('notch-offset').value = cfg && cfg.notch ? cfg.notch.offset : 10;
+  document.getElementById('notch-w').value = cfg && cfg.notch ? cfg.notch.w : 10;
+  document.getElementById('notch-d').value = cfg && cfg.notch ? cfg.notch.d : 5;
+  document.getElementById('custom-points').value = cfg && cfg.customText ? cfg.customText : '';
+
+  onShapeTypeChange();
+  document.getElementById('shape-modal').style.display = 'flex';
+}
+
+function closeShapeModal() {
+  document.getElementById('shape-modal').style.display = 'none';
+  shapeBuilderRow = null;
+}
+
+function applyShapeBuilder() {
+  const state = readShapeBuilderState();
+  if (!state) { document.getElementById('shape-error').textContent = 'לא ניתן להחיל — בדוק שהמידות שלמות והזיזים/חריצים קטנים מהתיבה הכוללת'; return; }
+  const row = document.getElementById('row-' + shapeBuilderRow);
+  const type = document.getElementById('shape-type').value;
+
+  document.getElementById('row-w-' + shapeBuilderRow).value = Math.round(state.w * 10) / 10;
+  document.getElementById('row-h-' + shapeBuilderRow).value = Math.round(state.h * 10) / 10;
+  row.dataset.points = JSON.stringify(state.points);
+
+  const cfg = { type };
+  if (type === 'custom') {
+    cfg.customText = document.getElementById('custom-points').value;
+  } else {
+    cfg.W = state.w; cfg.H = state.h;
+    if (type === 'corners' || type === 'chamfer') {
+      cfg.cuts = {};
+      ['tl','tr','br','bl'].forEach(k => {
+        if (document.getElementById('corner-on-' + k).checked) {
+          cfg.cuts[k] = { w: parseFloat(document.getElementById('corner-w-' + k).value) || 0, h: parseFloat(document.getElementById('corner-h-' + k).value) || 0 };
+        }
+      });
+    } else if (type === 'notch') {
+      cfg.notch = {
+        side: document.getElementById('notch-side').value,
+        offset: parseFloat(document.getElementById('notch-offset').value) || 0,
+        w: parseFloat(document.getElementById('notch-w').value) || 0,
+        d: parseFloat(document.getElementById('notch-d').value) || 0
+      };
+    }
+  }
+  row.dataset.shapeCfg = JSON.stringify(cfg);
+  updateShapeBtn(shapeBuilderRow);
+  closeShapeModal();
+}
+
+function clearShapeBuilder() {
+  const row = document.getElementById('row-' + shapeBuilderRow);
+  delete row.dataset.points;
+  delete row.dataset.shapeCfg;
+  updateShapeBtn(shapeBuilderRow);
+  closeShapeModal();
 }
 
 function toggleCutout(n) {
