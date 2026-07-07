@@ -549,7 +549,7 @@ function ensureShapeModal() {
       </div>
 
       <div id="shape-panel-corners">
-        <div class="hint" style="margin-top:0">סמן אילו פינות חתוכות ותן לכל אחת רוחב/גובה זיז. פינה אחת = L-שייפ. כמה פינות = צורה ייחודית (למשל אי צמוד לשני קירות).</div>
+        <div class="hint" id="corner-hint" style="margin-top:0">סמן אילו פינות חתוכות ותן לכל אחת רוחב/גובה זיז. פינה אחת = L-שייפ. כמה פינות = צורה ייחודית (למשל אי צמוד לשני קירות).</div>
         <div class="shape-corner-grid">
           ${['tl','tr','bl','br'].map(k => `
             <div class="shape-corner-cell" id="corner-cell-${k}">
@@ -610,10 +610,18 @@ function ensureShapeModal() {
 
 function onShapeTypeChange() {
   const type = document.getElementById('shape-type').value;
-  document.getElementById('shape-panel-corners').style.display = type === 'corners' ? 'block' : 'none';
+  const showCorners = type === 'corners' || type === 'chamfer';
+  document.getElementById('shape-panel-corners').style.display = showCorners ? 'block' : 'none';
   document.getElementById('shape-panel-notch').style.display = type === 'notch' ? 'block' : 'none';
   document.getElementById('shape-panel-custom').style.display = type === 'custom' ? 'block' : 'none';
   document.getElementById('shape-wh-row').style.display = type === 'custom' ? 'none' : 'flex';
+  document.getElementById('corner-hint').textContent = type === 'chamfer'
+    ? 'סמן אילו פינות משופעות ותן לכל אחת את גודל השיפוע לרוחב/לגובה (חיתוך 45° בקצה, לא זווית חדה).'
+    : 'סמן אילו פינות חתוכות ותן לכל אחת רוחב/גובה זיז. פינה אחת = L-שייפ. כמה פינות = צורה ייחודית (למשל אי צמוד לשני קירות).';
+  ['tl','tr','bl','br'].forEach(k => {
+    document.getElementById('corner-w-' + k).placeholder = type === 'chamfer' ? 'שיפוע רוחב' : 'רוחב זיז';
+    document.getElementById('corner-h-' + k).placeholder = type === 'chamfer' ? 'שיפוע גובה' : 'גובה זיז';
+  });
   renderShapePreview();
 }
 
@@ -1639,7 +1647,7 @@ function rotatePiece90(piece) {
   const el = piece.el;
   const oldH = piece.h;
   const tmp = piece.w; piece.w = piece.h; piece.h = tmp;
-  if (piece.shapePoints) piece.shapePoints = piece.shapePoints.map(p => [p[1], oldH - p[0]]);
+  if (piece.shapePoints) piece.shapePoints = piece.shapePoints.map(p => [oldH - p[1], p[0]]);
   piece.rotIndex = (piece.rotIndex + 1) % 4;
   const scale = pxPerCm(piece.slabId);
   el.style.width = (piece.w * scale) + 'px';
@@ -1958,7 +1966,7 @@ function arrangeOptimal(slabId, silent = false) {
     if (pl.rotate) {
       const oldH = p.h;
       const t = p.w; p.w = p.h; p.h = t;
-      if (p.shapePoints) p.shapePoints = p.shapePoints.map(pt => [pt[1], oldH - pt[0]]);
+      if (p.shapePoints) p.shapePoints = p.shapePoints.map(pt => [oldH - pt[1], pt[0]]);
       p.rotIndex = (p.rotIndex + 1) % 4;
     }
     p.rotated = false;
