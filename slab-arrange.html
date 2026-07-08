@@ -77,6 +77,34 @@
   .shape-field-row label { font-size:12px; color:#5a5540; display:flex; flex-direction:column; gap:4px; flex:1; }
   .shape-field-row input, .shape-field-row select { font-size:13px; padding:8px 9px; border-radius:8px; border:1px solid #ddd6c5; background:#faf8f3; }
 
+  /* 3D FOLD PREVIEW — קיפול קצוות (דופן/מפל) סביב ציר נבחר */
+  .tdp-piece-group { position:absolute; transform-style:preserve-3d; cursor:pointer; transition:transform .2s; }
+  .tdp-face { position:absolute; inset:0; background-size:100% 100%; border:3px solid; box-shadow:0 0 0 1.5px rgba(255,255,255,0.9); border-radius:2px; }
+  .tdp-edge-strip { position:absolute; background:#8a8578; }
+  .tdp-edge-panel { position:fixed; z-index:1100; width:200px; background:#fff; border:1px solid #ddd6c5; border-radius:14px; padding:14px; box-shadow:0 8px 30px rgba(0,0,0,0.25); display:none; }
+  .tdp-edge-panel input[type=range] { width:100%; accent-color:#c9973a; }
+
+  /* PRINT / PDF SNAPSHOT — עמוד אחד לכל לוח, מוסתר במסך הרגיל, גלוי רק בהדפסה */
+  #print-area { display:none; }
+  .print-page { page-break-after:always; padding:20px; }
+  .print-page img { max-width:100%; border:1px solid #ddd; }
+  @media print {
+    body > *:not(#print-area) { display:none !important; }
+    #print-area { display:block !important; }
+  }
+
+  /* VIEW-ONLY — קובץ "Interactive Approval" שיוצא ללקוח: מסתיר כל כלי עריכה/מחיקה/ייבוא,
+     משאיר רק את תצוגת ה-3D (שהיא בדיוק "הלקוח יכול לסובב חלקים") */
+  body.view-only .ctrl-btn,
+  body.view-only .slab-toolbar button:not(.tdp-only),
+  body.view-only .btn-main,
+  body.view-only .btn-secondary,
+  body.view-only .btn-add-row,
+  body.view-only #saved-projects-select,
+  body.view-only .cutout-toggle,
+  body.view-only .shape-btn,
+  body.view-only .del-row { display:none !important; }
+
   .btn-add-row {
     width:100%; background:transparent; border:1px dashed #ddd6c5; color:#8a8578;
     border-radius:10px; padding:9px; font-size:12px; cursor:pointer; margin-bottom:14px;
@@ -335,6 +363,7 @@
       <button class="btn-add-row" onclick="exportProjectFile()">⬇️ ייצוא לקובץ (גיבוי)</button>
       <button class="btn-add-row" onclick="document.getElementById('project-import-input').click()">⬆️ ייבוא מקובץ</button>
       <input type="file" id="project-import-input" accept=".json" style="display:none">
+      <button class="btn-secondary" onclick="openShareModal()">🔗 שתף לאישור לקוח</button>
       <div class="hint">💡 השמירה היא בדפדפן הזה בלבד (localStorage). כדי להעביר פרויקט למחשב אחר — "ייצוא לקובץ" ואז "ייבוא מקובץ" שם.</div>
 
       <h3 style="margin-top:20px">01 — לוחות (פלטות)</h3>
@@ -782,6 +811,7 @@ for (let i = 0; i < 4; i++) addRow();
 
 // ── SLABS (לוחות) — תמיכה במספר פלטות, כולל Book Match ──────────────────
 function addSlab() {
+  if (window.__SLAB_VIEW_ONLY__) return;
   slabIdCounter++;
   const id = 'slab' + slabIdCounter;
   const name = String.fromCharCode(64 + slabIdCounter); // A, B, C...
@@ -867,6 +897,7 @@ function renderSlabStage(slab) {
       <button onclick="downloadImage('${slab.id}')">📥 הורד תמונה</button>
       <button onclick="downloadCombinedImage('${slab.id}')">🖼️ הורד Book Match — לוח שלם</button>
       <button onclick="exportSlabDXF('${slab.id}')">⬇️ ייצוא DXF (ל-CNC)</button>
+      <button class="tdp-only" onclick="open3DPreview('${slab.id}')">🧊 תצוגת 3D</button>
       <button onclick="clearSlabPieces('${slab.id}')">🗑️ נקה חלקים מהלוח הזה</button>
     </div>
     <div class="hint" id="arrange-result-${slab.id}" style="display:none"></div>
@@ -1172,6 +1203,235 @@ function cancelCrop() {
   cropState = null;
 }
 
+// ── 3D FOLD PREVIEW — קיפול קצוות (דופן/מפל) סביב ציר נבחר ──────────────
+// כל חלק מקבל piece.fold = {edge, angleDeg}. הקיפול משתמש בטקסטורת האבן האמיתית
+// של החלק (getPieceTextureCanvas, כבר קיים ומדויק לסיבוב הנוכחי) כדי שהגיד ייראה נכון גם מקופל.
+let tdp = { slabId: null, thicknessMm: 30, flat: false };
+let tdpActiveEdgePiece = null;
+
+function ensure3DModal() {
+  if (document.getElementById('tdp-modal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'tdp-modal';
+  modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:#ffffff; border-radius:18px; padding:24px; width:900px; max-width:94vw; max-height:90vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.35); display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <h3 style="font-size:15px; font-weight:800; color:#2b2b26; margin:0;">🧊 תצוגת 3D — קיפול קצוות</h3>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <label style="font-size:12px; color:#5a5540; display:flex; align-items:center; gap:6px;">עובי (מ"מ)
+            <input type="number" id="tdp-thickness" value="30" style="width:60px; font-size:13px; padding:6px 7px; border-radius:8px; border:1px solid #ddd6c5; background:#faf8f3;" oninput="setTdpThickness(this.value)">
+          </label>
+          <button class="btn-secondary" style="margin-top:0; padding:8px 14px;" onclick="toggleTdpShowAll()">👁️ הצג הכל (שטוח)</button>
+          <button class="btn-secondary" style="margin-top:0; padding:8px 14px;" onclick="resetAllTdpFolds()">↺ אפס הכל</button>
+          <button style="background:transparent; border:1px solid #ddd6c5; border-radius:10px; color:#8a8578; padding:8px 14px; font-size:13px; cursor:pointer;" onclick="close3DModal()">סגור ✕</button>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:0">לחץ ליד קצה של חלק כדי לבחור אותו כ"ציר קיפול", ואז קבע זווית — כמו דופן/מפל שקם מהמשטח.</div>
+      <div id="tdp-scene-wrap">
+        <div id="tdp-scene"></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function open3DPreview(slabId) {
+  const slab = slabs.find(s => s.id === slabId);
+  if (!slab || !slab.img) { alert('העלה תמונת לוח קודם 📷'); return; }
+  ensure3DModal();
+  tdp.slabId = slabId;
+  tdp.flat = false;
+  document.getElementById('tdp-thickness').value = tdp.thicknessMm;
+  render3DScene(slabId);
+  document.getElementById('tdp-modal').style.display = 'flex';
+}
+
+function close3DModal() {
+  document.getElementById('tdp-modal').style.display = 'none';
+  hideTdpEdgePanel();
+}
+
+function render3DScene(slabId) {
+  const slab = slabs.find(s => s.id === slabId);
+  if (!slab) return;
+  const wrap = document.getElementById('tdp-scene-wrap');
+  const scene = document.getElementById('tdp-scene');
+  const wPx = 800, hPx = 800 * slab.slabH / slab.slabW;
+  wrap.style.cssText = `perspective:1600px; perspective-origin:50% 20%; width:${wPx}px; height:${hPx + 260}px; margin:0 auto;`;
+  // הטיית מצלמה קטנה בכוונה: הקיפול של החלק עצמו (rotateX) הוא על אותו ציר X של הטיית הסצנה,
+  // כך ששתי הזוויות מצטרפות זו לזו (55°+90°=145° היה כמעט "מהצד השני") — הטיה קטנה משאירה טווח
+  // שימושי לעין לאורך כל טווח הזוויות 0°-180° של הקיפול עצמו
+  scene.style.cssText = `position:relative; width:${wPx}px; height:${hPx}px; margin-top:130px; transform-style:preserve-3d; transform:rotateX(${tdp.flat ? 0 : 18}deg); transition:transform .25s;`;
+  scene.innerHTML = `<div id="tdp-slab-base" style="position:absolute; inset:0; background-image:url('${slab.img.src}'); background-size:100% 100%; border-radius:8px;"></div>`;
+  pieces.filter(p => p.slabId === slabId).forEach(p => {
+    if (!p.fold) p.fold = { edge: null, angleDeg: 0 };
+    p._tdpTextureCache = null;
+    render3DPiece(p);
+  });
+}
+
+// טבלת חיפוש יחידה למתמטיקת הציר: לכל קצה — נקודת הציר (transform-origin) וציר/סימן הסיבוב
+function getTdpEdgeGeometry(edge) {
+  switch (edge) {
+    case 'top': return { origin: '50% 0%', axis: 'rotateX', sign: -1 };
+    case 'bottom': return { origin: '50% 100%', axis: 'rotateX', sign: 1 };
+    case 'left': return { origin: '0% 50%', axis: 'rotateY', sign: 1 };
+    case 'right': return { origin: '100% 50%', axis: 'rotateY', sign: -1 };
+    default: return { origin: '50% 50%', axis: null, sign: 1 };
+  }
+}
+
+// מרנדר/מעדכן חלק בודד בתוך הסצנה — נקרא גם ביצירה וגם בכל שינוי זווית (לא בונה מחדש את כל הסצנה)
+function render3DPiece(piece) {
+  if (piece.slabId !== tdp.slabId) return;
+  const scene = document.getElementById('tdp-scene');
+  if (!scene) return;
+  let group = document.getElementById('tdp-piece-' + piece.id);
+  if (!group) {
+    group = document.createElement('div');
+    group.id = 'tdp-piece-' + piece.id;
+    group.className = 'tdp-piece-group';
+    scene.appendChild(group);
+  }
+
+  const scale = pxPerCm(piece.slabId);
+  const wPx = parseFloat(piece.el.style.width), hPx = parseFloat(piece.el.style.height);
+  const left = parseFloat(piece.el.style.left), top = parseFloat(piece.el.style.top);
+  group.style.left = left + 'px';
+  group.style.top = top + 'px';
+  group.style.width = wPx + 'px';
+  group.style.height = hPx + 'px';
+
+  if (!piece._tdpTextureCache) {
+    const canvas = getPieceTextureCanvas(piece);
+    piece._tdpTextureCache = canvas ? canvas.toDataURL() : '';
+  }
+
+  const geo = getTdpEdgeGeometry(piece.fold.edge);
+  group.style.transformOrigin = geo.origin;
+  group.style.transform = geo.axis ? `${geo.axis}(${geo.sign * piece.fold.angleDeg}deg)` : 'none';
+
+  let outlineSvg = '';
+  if (piece.shapePoints) {
+    const pts = piece.shapePoints.map(p => `${p[0] * scale},${p[1] * scale}`).join(' ');
+    outlineSvg = `<svg width="${wPx}" height="${hPx}" style="position:absolute; top:0; left:0; pointer-events:none;"><polygon fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="5,4" points="${pts}"></polygon></svg>`;
+  }
+
+  // רצועת עובי — הפאה השנייה (עובי האבן) של אותו חלק, תמיד בזווית קבועה של 90° יחסית לפאה
+  // הראשית שלו (לא יחסית לבסיס) — כי זה עובי פיזי קשיח של אותו חלק, לא תלוי בזווית הקיפול
+  let stripHtml = '';
+  const thicknessPx = (tdp.thicknessMm / 10) * scale;
+  if (piece.fold.edge && piece.fold.angleDeg > 0) {
+    if (piece.fold.edge === 'bottom') {
+      stripHtml = `<div class="tdp-edge-strip" style="left:0; bottom:0; width:100%; height:${thicknessPx}px; transform-origin:bottom; transform:rotateX(90deg);"></div>`;
+    } else if (piece.fold.edge === 'top') {
+      stripHtml = `<div class="tdp-edge-strip" style="left:0; top:0; width:100%; height:${thicknessPx}px; transform-origin:top; transform:rotateX(-90deg);"></div>`;
+    } else if (piece.fold.edge === 'left') {
+      stripHtml = `<div class="tdp-edge-strip" style="top:0; left:0; height:100%; width:${thicknessPx}px; transform-origin:left; transform:rotateY(90deg);"></div>`;
+    } else if (piece.fold.edge === 'right') {
+      stripHtml = `<div class="tdp-edge-strip" style="top:0; right:0; height:100%; width:${thicknessPx}px; transform-origin:right; transform:rotateY(-90deg);"></div>`;
+    }
+  }
+
+  group.innerHTML = `
+    <div class="tdp-face" style="background-image:url('${piece._tdpTextureCache}'); border-color:${piece.color};" onclick="onTdpFaceClick(event, pieces.find(pp => pp.id === ${piece.id}))">
+      ${outlineSvg}
+    </div>
+    ${stripHtml}
+  `;
+}
+
+// זיהוי קצה לפי מרחק נקודת הלחיצה מארבעת הצלעות (הקרוב ביותר מנצח, בתוך אזור ~28% מהצלע הקצרה)
+function onTdpFaceClick(e, piece) {
+  e.stopPropagation();
+  if (!piece) return;
+  const w = e.currentTarget.clientWidth, h = e.currentTarget.clientHeight;
+  const x = e.offsetX, y = e.offsetY;
+  const distTop = y, distBottom = h - y, distLeft = x, distRight = w - x;
+  const zone = Math.min(w, h) * 0.28;
+  const min = Math.min(distTop, distBottom, distLeft, distRight);
+  if (min > zone) { hideTdpEdgePanel(); return; }
+  const edge = min === distTop ? 'top' : min === distBottom ? 'bottom' : min === distLeft ? 'left' : 'right';
+  showTdpEdgePanel(piece, edge, e.clientX, e.clientY);
+}
+
+function showTdpEdgePanel(piece, edge, clientX, clientY) {
+  let panel = document.getElementById('tdp-edge-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'tdp-edge-panel';
+    panel.className = 'tdp-edge-panel';
+    document.body.appendChild(panel);
+  }
+  piece.fold.edge = edge;
+  tdpActiveEdgePiece = piece;
+  const edgeNames = { top: 'עליון', bottom: 'תחתון', left: 'שמאלי', right: 'ימני' };
+  panel.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <b style="font-size:12px; color:#2b2b26;">${piece.label} · קצה ${edgeNames[edge]}</b>
+      <span style="cursor:pointer; color:#8a8578;" onclick="hideTdpEdgePanel()">✕</span>
+    </div>
+    <input type="range" id="tdp-angle-slider" min="0" max="270" value="${piece.fold.angleDeg}" oninput="setTdpAngle(pieces.find(p => p.id === ${piece.id}), parseFloat(this.value))">
+    <div id="tdp-angle-readout" style="text-align:center; font-size:13px; color:#5a5540; margin:4px 0 10px;">${piece.fold.angleDeg}°</div>
+    <div style="display:flex; gap:6px; margin-bottom:8px;">
+      <button class="sp-step" onclick="setTdpAngle(pieces.find(p => p.id === ${piece.id}), 0)">0°</button>
+      <button class="sp-step" onclick="bumpTdpAngle(pieces.find(p => p.id === ${piece.id}), 45)">+45°</button>
+      <button class="sp-step" onclick="bumpTdpAngle(pieces.find(p => p.id === ${piece.id}), 90)">+90°</button>
+    </div>
+    <button class="btn-secondary" style="margin-top:0; width:100%;" onclick="resetTdpPieceFold(pieces.find(p => p.id === ${piece.id}))">↺ אפס</button>
+  `;
+  panel.style.left = Math.min(clientX + 10, window.innerWidth - 220) + 'px';
+  panel.style.top = Math.min(clientY + 10, window.innerHeight - 220) + 'px';
+  panel.style.display = 'block';
+  render3DPiece(piece);
+}
+
+function hideTdpEdgePanel() {
+  const panel = document.getElementById('tdp-edge-panel');
+  if (panel) panel.style.display = 'none';
+  tdpActiveEdgePiece = null;
+}
+
+function setTdpAngle(piece, angleDeg) {
+  if (!piece || !piece.fold) return;
+  piece.fold.angleDeg = Math.max(0, Math.min(270, angleDeg));
+  render3DPiece(piece);
+  if (tdpActiveEdgePiece === piece) {
+    const slider = document.getElementById('tdp-angle-slider');
+    const readout = document.getElementById('tdp-angle-readout');
+    if (slider) slider.value = piece.fold.angleDeg;
+    if (readout) readout.textContent = piece.fold.angleDeg + '°';
+  }
+}
+
+function bumpTdpAngle(piece, deltaDeg) {
+  if (!piece || !piece.fold) return;
+  setTdpAngle(piece, piece.fold.angleDeg + deltaDeg);
+}
+
+function resetTdpPieceFold(piece) {
+  if (!piece) return;
+  piece.fold = { edge: null, angleDeg: 0 };
+  render3DPiece(piece);
+  hideTdpEdgePanel();
+}
+
+function resetAllTdpFolds() {
+  pieces.filter(p => p.slabId === tdp.slabId).forEach(p => { p.fold = { edge: null, angleDeg: 0 }; render3DPiece(p); });
+  hideTdpEdgePanel();
+}
+
+function toggleTdpShowAll() {
+  tdp.flat = !tdp.flat;
+  render3DScene(tdp.slabId);
+}
+
+function setTdpThickness(mm) {
+  tdp.thicknessMm = parseFloat(mm) || 0;
+  pieces.filter(p => p.slabId === tdp.slabId).forEach(render3DPiece);
+}
+
 function onBookMatchToggle(slabId) {
   if (!document.getElementById('bookmatch-' + slabId).checked) return;
   const slab = slabs.find(s => s.id === slabId);
@@ -1281,6 +1541,7 @@ function setUnit(u) {
 }
 
 function loadDxf(file) {
+  if (window.__SLAB_VIEW_ONLY__) return;
   const reader = new FileReader();
   reader.onload = e => {
     const text = e.target.result;
@@ -1553,6 +1814,7 @@ function addDxfToCalc() {
 // כל חלק יוצא כ-LWPOLYLINE נפרד, במיקום האמיתי שלו על הלוח (ס"מ), עם הצורה האמיתית שלו
 // (הפוליגון שנשמר מ-DXF מקורי, או מלבן פשוט אם זה חלק שנוצר ידנית מהמחשבון)
 function exportSlabDXF(slabId) {
+  if (window.__SLAB_VIEW_ONLY__) return;
   const slab = slabs.find(s => s.id === slabId);
   if (!slab) return;
   const slabPieces = pieces.filter(p => p.slabId === slabId && !p.isCutout);
@@ -2219,12 +2481,14 @@ function makeDraggable(el, piece) {
   }
 
   el.addEventListener('mousedown', e => {
+    if (window.__SLAB_VIEW_ONLY__) return;
     if (e.target.classList.contains('ctrl-btn') || e.target.closest('.edit-popover')) return;
     e.preventDefault();
     document.querySelectorAll('.edit-popover').forEach(p => p.remove());
     startDrag(e.clientX, e.clientY);
   });
   el.addEventListener('touchstart', e => {
+    if (window.__SLAB_VIEW_ONLY__) return;
     if (e.target.classList.contains('ctrl-btn') || e.target.closest('.edit-popover')) return;
     startDrag(e.touches[0].clientX, e.touches[0].clientY);
   }, { passive:true });
@@ -2232,6 +2496,7 @@ function makeDraggable(el, piece) {
 
 // ── CLEAR ALL ──────────────────────────────────────────────────────────────
 function clearAll() {
+  if (window.__SLAB_VIEW_ONLY__) return;
   pieces.forEach(p => { clearSeamVisual(p.connId); p.el.remove(); });
   pieces = [];
   document.getElementById('waiting-zone').style.display = 'none';
@@ -2280,6 +2545,7 @@ function serializeProject() {
 }
 
 function saveProjectPrompt() {
+  if (window.__SLAB_VIEW_ONLY__) return;
   const nameInput = document.getElementById('project-name');
   const name = (nameInput.value || '').trim();
   if (!name) { alert('תן שם לפרויקט קודם'); return; }
@@ -2302,6 +2568,7 @@ function loadProjectPrompt() {
 }
 
 function deleteProjectPrompt() {
+  if (window.__SLAB_VIEW_ONLY__) return;
   const name = document.getElementById('saved-projects-select').value;
   if (!name) return;
   if (!confirm('למחוק את הפרויקט השמור "' + name + '"? זה לא ניתן לביטול.')) return;
@@ -2392,6 +2659,172 @@ async function loadProjectData(data) {
 }
 
 refreshSavedProjectsSelect();
+
+// ── SHARE / CLIENT APPROVAL — שיתוף פריסה ללקוח (בלי שרת, שני מסלולים כנים) ─────
+// "PDF Snapshot" = הדפסה מובנית של הדפדפן (הלקוח/אתה שומרים כ-PDF בעצמכם).
+// "Interactive Approval" = קובץ HTML עצמאי (כולל את הפרויקט הנוכחי, כל הקוד),
+// נפתח בכל דפדפן בלי צורך בשרת, עם תצוגת 3D אינטראקטיבית מלאה — אבל view-only,
+// בלי עריכה/מחיקה/ייבוא. אין באמת "אישור מרחוק" כי אין שרת שיקבל אותו.
+let shareState = { blob: null, filename: null };
+
+function ensureShareModal() {
+  if (document.getElementById('share-modal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'share-modal';
+  modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:#ffffff; border-radius:18px; padding:24px; width:480px; max-width:92vw; box-shadow:0 20px 60px rgba(0,0,0,0.35); display:flex; flex-direction:column; gap:10px;">
+      <div id="share-step-1">
+        <h3 style="font-size:15px; font-weight:800; color:#2b2b26; margin:0 0 4px;">🔗 שתף לאישור לקוח</h3>
+        <div class="hint" style="margin-top:0">בחר איך הלקוח יראה את הפריסה.</div>
+        <button class="btn-main" onclick="chooseShareMode('pdf')">📄 PDF Snapshot — תמונה סטטית להדפסה/שמירה</button>
+        <button class="btn-secondary" onclick="chooseShareMode('interactive')">🖱️ Interactive Approval — קובץ שהלקוח פותח ויכול לסובב חלקים (כולל תצוגת 3D)</button>
+        <button style="background:transparent; border:1px solid #ddd6c5; border-radius:10px; color:#8a8578; padding:10px 18px; font-size:13px; cursor:pointer; margin-top:4px; width:100%;" onclick="closeShareModal()">ביטול</button>
+      </div>
+      <div id="share-step-2" style="display:none">
+        <h3 style="font-size:15px; font-weight:800; color:#2b2b26; margin:0 0 4px;">שיתוף</h3>
+        <div class="hint" id="share-step-2-hint" style="margin-top:0"></div>
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+          <button class="btn-secondary" onclick="shareViaEmail()">📧 Email</button>
+          <button class="btn-secondary" onclick="shareViaWhatsApp()">💬 WhatsApp</button>
+          <button class="btn-secondary" onclick="copyShareMessage()">📋 העתק הודעה</button>
+          <button class="btn-secondary" onclick="shareViaSms()">✉️ SMS</button>
+        </div>
+        <button style="background:transparent; border:1px solid #ddd6c5; border-radius:10px; color:#8a8578; padding:10px 18px; font-size:13px; cursor:pointer; margin-top:10px; width:100%;" onclick="closeShareModal()">סגור</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function openShareModal() {
+  ensureShareModal();
+  document.getElementById('share-step-1').style.display = 'block';
+  document.getElementById('share-step-2').style.display = 'none';
+  document.getElementById('share-modal').style.display = 'flex';
+}
+
+function closeShareModal() {
+  document.getElementById('share-modal').style.display = 'none';
+}
+
+function chooseShareMode(mode) {
+  if (mode === 'pdf') {
+    generatePdfSnapshot();
+    document.getElementById('share-step-2-hint').textContent = 'חלון הדפסה נפתח — בחר "שמור כ-PDF" ואז שתף את הקובץ שנשמר.';
+  } else {
+    generateInteractiveApproval();
+    document.getElementById('share-step-2-hint').textContent = 'קובץ HTML ירד עכשיו למחשב שלך — צרף אותו ידנית להודעה (וואטסאפ/מייל/SMS לא יכולים לצרף קובץ אוטומטית, רק לפתוח הודעה עם טקסט מוכן).';
+  }
+  document.getElementById('share-step-1').style.display = 'none';
+  document.getElementById('share-step-2').style.display = 'block';
+}
+
+// בונה אזור הדפסה נסתר — עמוד אחד לכל לוח, עם תמונת הלוח + החלקים (renderSlabToCanvas הקיים)
+function buildPrintArea() {
+  let area = document.getElementById('print-area');
+  if (!area) {
+    area = document.createElement('div');
+    area.id = 'print-area';
+    document.body.appendChild(area);
+  }
+  const projectName = document.getElementById('project-name').value || 'פרויקט ללא שם';
+  area.innerHTML = slabs.filter(s => s.img).map(s => {
+    const canvas = renderSlabToCanvas(s.id);
+    const matEl = document.getElementById('slab-material-' + s.id);
+    const material = matEl ? matEl.value : '';
+    return `
+      <div class="print-page">
+        <h2>${projectName} — לוח ${s.name}</h2>
+        <div style="font-size:12px; color:#555; margin-bottom:8px;">${s.slabW}×${s.slabH} ס"מ · ${material} · ${new Date().toLocaleDateString('he-IL')}</div>
+        <img src="${canvas ? canvas.toDataURL('image/png') : ''}" style="max-width:100%;">
+      </div>
+    `;
+  }).join('');
+}
+
+function generatePdfSnapshot() {
+  buildPrintArea();
+  window.print();
+}
+
+// משכפל את כל דף ה-HTML הנוכחי (כולל ה-CSS/JS כמו שהם), ומזריק לתוכו את הפרויקט הנוכחי
+// + דגל "view-only", כדי שהקובץ יהיה עותק עצמאי ומלא של הכלי, עם הפרויקט כבר טעון
+function buildStandaloneViewerHtml(projectData) {
+  let html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  // ה-backslash לפני ה-/ בסגירת התג בכוונה: בלעדיו, פרסר ה-HTML של הדף עצמו (לא מנוע ה-JS!)
+  // היה קורא את הרצף המילולי כסוף תג הסקריפט האמיתי שהקוד הזה יושב בתוכו — עוד לפני שה-JS
+  // בכלל רץ — ומשבש את כל שאר הדף. ה-backslash שובר את הזיהוי המילולי, גם בתוך ההערה הזו עצמה.
+  const marker = '<scr' + 'ipt>window.__SLAB_SHARED_PROJECT__ = ' + JSON.stringify(projectData) + '; window.__SLAB_VIEW_ONLY__ = true;<\/script>';
+  // הקלונינג (outerHTML) לוכד את הדף בדיוק כמו שהוא נראה כרגע — כולל אם מודל כלשהו פתוח
+  // באותו רגע (כמו מודל השיתוף עצמו!) — אז חובה לסגור כל מודל אפשרי בטעינה של הקובץ המיוצא,
+  // אחרת הוא יישאר "תקוע" פתוח וחוסם את כל המסך אצל מי שפותח את הקובץ
+  const bootstrap = `
+    <scr${''}ipt>
+      document.addEventListener('DOMContentLoaded', function() {
+        document.body.classList.add('view-only');
+        document.querySelectorAll('[id$="-modal"]').forEach(function(m) { m.style.display = 'none'; });
+        if (window.__SLAB_SHARED_PROJECT__) loadProjectData(window.__SLAB_SHARED_PROJECT__);
+      });
+    <\/script>
+  `;
+  // string.replace() (מחליף את המופע *הראשון*) לא בטוח כאן: הקוד של הפונקציה הזו עצמה — כולל
+  // המחרוזות '<head>'/'</body>' ששימשו כאן פעם כמטרת replace — משוכפל בתוך ה-HTML (כי אנחנו
+  // משכפלים את כל <script> הדף, וזה כולל את קוד המקור של הפונקציה הזו!), ועלול להיות המופע
+  // הראשון שנמצא — כלומר להזריק את ה-bootstrap באמצע הקוד המקורי במקום בסוף ה-body האמיתי.
+  // לכן: <head> האמיתי מובטח להיות המופע *הראשון* בכל המסמך (שום דבר לא מופיע לפניו),
+  // ו-</body> האמיתי מובטח להיות המופע *האחרון* (הכל, כולל כל הסקריפטים, בא לפניו).
+  const headIdx = html.indexOf('<head>') + '<head>'.length;
+  html = html.slice(0, headIdx) + marker + html.slice(headIdx);
+  const bodyCloseIdx = html.lastIndexOf('</body>');
+  html = html.slice(0, bodyCloseIdx) + bootstrap + html.slice(bodyCloseIdx);
+  return html;
+}
+
+function generateInteractiveApproval() {
+  const html = buildStandaloneViewerHtml(serializeProject());
+  const projectName = (document.getElementById('project-name').value || 'פרויקט').replace(/[^\w֐-׿-]+/g, '_');
+  const blob = new Blob([html], { type: 'text/html' });
+  shareState.blob = blob;
+  shareState.filename = projectName + '-אישור.html';
+  const link = document.createElement('a');
+  link.download = shareState.filename;
+  link.href = URL.createObjectURL(blob);
+  link.click();
+}
+
+// פעיל רק בתוך הקובץ המיוצא (view-only) — פותח מייל מוכן-מראש כדי "לאשר" את הפריסה מול בעל העסק
+function approveLayout() {
+  if (!window.__SLAB_VIEW_ONLY__) return;
+  const subject = encodeURIComponent('אישור פריסה — ' + (document.getElementById('project-name').value || 'פרויקט'));
+  const body = encodeURIComponent('מאשר/ת את הפריסה שנשלחה אליי.');
+  window.open('mailto:?subject=' + subject + '&body=' + body);
+}
+
+function shareMessageText() {
+  const projectName = document.getElementById('project-name').value || 'הפרויקט';
+  return 'שלום! מצורפת פריסת השיש עבור ' + projectName + '. נא לצרף את הקובץ שירד כרגע להודעה הזו לפני השליחה.';
+}
+
+function shareViaEmail() {
+  const subject = encodeURIComponent('פריסת שיש לאישור');
+  const body = encodeURIComponent(shareMessageText());
+  window.open('mailto:?subject=' + subject + '&body=' + body);
+}
+
+function shareViaWhatsApp() {
+  window.open('https://wa.me/?text=' + encodeURIComponent(shareMessageText()));
+}
+
+function shareViaSms() {
+  window.open('sms:?body=' + encodeURIComponent(shareMessageText()));
+}
+
+function copyShareMessage() {
+  navigator.clipboard.writeText(shareMessageText()).then(() => {
+    alert('ההודעה הועתקה — אל תשכח לצרף גם את הקובץ שירד');
+  });
+}
 
 // מנקה רק את החלקים שהונחו על לוח ספציפי — בלי לגעת בלוחות אחרים או ברשימת המחשבון,
 // כך שאפשר להעביר את אותה רשימה ללוח הבא בלי שהחלקים הקודמים יישארו על הלוח הקודם
