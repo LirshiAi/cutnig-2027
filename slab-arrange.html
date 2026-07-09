@@ -229,6 +229,7 @@
   /* כל הכפתורים בתוך גבול היחידה (לא צפים מעליה) — כך שלעולם לא יחרגו מהלוח, גם ביחידה שנוגעת בקצה */
   .piece .rotate-btn { top:3px; left:3px; border-color:#c9973a; }
   .piece .edit-btn { top:3px; left:25px; border-color:#5BC0EB; }
+  .piece .shape-edit-btn { top:3px; left:47px; border-color:#A78BFA; }
   .piece .del-btn { top:3px; right:3px; }
   .piece .del-btn:hover { border-color:#c0392b; color:#c0392b; }
 
@@ -306,6 +307,10 @@
     position:relative; background:#f7f2e4; border:2px dashed #e8dfc8; border-radius:12px;
     min-height:140px; overflow-x:auto; overflow-y:visible; white-space:nowrap;
   }
+  /* בלוח אמיתי, ה-piece שקוף כדי שתמונת האבן מתחתיו תיראה — אבל באזור ההמתנה אין תמונה,
+     אז שקיפות = כמעט בלתי-נראה. כאן במקום זה נותנים רקע מלא בצבע החלק, כדי שיהיה ברור מה מחכה */
+  .waiting-stage .piece { background:var(--piece-color, #b0aa98) !important; opacity:0.85; }
+  .waiting-stage .piece .piece-label { color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.5); }
 
   .piece .cross-slab-badge {
     position:absolute; top:24px; left:3px; background:#fff8e0; color:#a07d2e;
@@ -559,7 +564,7 @@ function parseCustomPoints(text) {
   return pts.map(p => [p[0] - minX, p[1] - minY]); // מנרמל כך שהפינה השמאלית-עליונה תהיה (0,0)
 }
 
-let shapeBuilderRow = null;
+let shapeBuilderTarget = null; // { row: rowNum } (שורה במחשבון) או { piece } (חלק שכבר מונח על לוח)
 let lshapeSelectedCorner = 'br';
 
 // אייקון ממוזער — מלבן עם "נגיסה" בפינה הרלוונטית, כדי לבחור פינה ויזואלית בלי לקרוא טקסט
@@ -778,13 +783,26 @@ function renderShapePreview() {
 
 function openShapeBuilder(rowNum) {
   ensureShapeModal();
-  shapeBuilderRow = rowNum;
+  shapeBuilderTarget = { row: rowNum };
   const row = document.getElementById('row-' + rowNum);
   const cfg = row.dataset.shapeCfg ? JSON.parse(row.dataset.shapeCfg) : null;
+  fillShapeBuilderForm(cfg, parseFloat(document.getElementById('row-w-' + rowNum).value) || 200, parseFloat(document.getElementById('row-h-' + rowNum).value) || 100);
+  document.getElementById('shape-modal').style.display = 'flex';
+}
 
+// עריכת צורה על חלק שכבר מונח בפועל על לוח (לא שורה במחשבון) — למשל אחרי ש"סידור אופטימלי"
+// כבר הזיז/סובב אותו, ורוצים לתקן את הצורה שלו בלי להתחיל מחדש מהמחשבון
+function openShapeBuilderForPiece(piece) {
+  ensureShapeModal();
+  shapeBuilderTarget = { piece };
+  fillShapeBuilderForm(piece.shapeCfg || null, piece.w, piece.h);
+  document.getElementById('shape-modal').style.display = 'flex';
+}
+
+function fillShapeBuilderForm(cfg, defaultW, defaultH) {
   document.getElementById('shape-type').value = cfg ? cfg.type : 'lshape';
-  document.getElementById('shape-W').value = cfg ? cfg.W : (parseFloat(document.getElementById('row-w-' + rowNum).value) || 200);
-  document.getElementById('shape-H').value = cfg ? cfg.H : (parseFloat(document.getElementById('row-h-' + rowNum).value) || 100);
+  document.getElementById('shape-W').value = cfg ? cfg.W : defaultW;
+  document.getElementById('shape-H').value = cfg ? cfg.H : defaultH;
   if (cfg && cfg.type === 'lshape') {
     lshapeSelectedCorner = cfg.corner || 'br';
     document.getElementById('lshape-w').value = cfg.cutW || 60;
@@ -810,24 +828,14 @@ function openShapeBuilder(rowNum) {
   document.getElementById('custom-points').value = cfg && cfg.customText ? cfg.customText : '';
 
   onShapeTypeChange();
-  document.getElementById('shape-modal').style.display = 'flex';
 }
 
 function closeShapeModal() {
   document.getElementById('shape-modal').style.display = 'none';
-  shapeBuilderRow = null;
+  shapeBuilderTarget = null;
 }
 
-function applyShapeBuilder() {
-  const state = readShapeBuilderState();
-  if (!state) { document.getElementById('shape-error').textContent = 'לא ניתן להחיל — בדוק שהמידות שלמות והזיזים/חריצים קטנים מהתיבה הכוללת'; return; }
-  const row = document.getElementById('row-' + shapeBuilderRow);
-  const type = document.getElementById('shape-type').value;
-
-  document.getElementById('row-w-' + shapeBuilderRow).value = Math.round(state.w * 10) / 10;
-  document.getElementById('row-h-' + shapeBuilderRow).value = Math.round(state.h * 10) / 10;
-  row.dataset.points = JSON.stringify(state.points);
-
+function buildShapeCfgFromForm(type, state) {
   const cfg = { type };
   if (type === 'custom') {
     cfg.customText = document.getElementById('custom-points').value;
@@ -853,16 +861,54 @@ function applyShapeBuilder() {
       };
     }
   }
-  row.dataset.shapeCfg = JSON.stringify(cfg);
-  updateShapeBtn(shapeBuilderRow);
+  return cfg;
+}
+
+function applyShapeBuilder() {
+  const state = readShapeBuilderState();
+  if (!state) { document.getElementById('shape-error').textContent = 'לא ניתן להחיל — בדוק שהמידות שלמות והזיזים/חריצים קטנים מהתיבה הכוללת'; return; }
+  const type = document.getElementById('shape-type').value;
+  const cfg = buildShapeCfgFromForm(type, state);
+
+  if (shapeBuilderTarget.row != null) {
+    const rowNum = shapeBuilderTarget.row;
+    const row = document.getElementById('row-' + rowNum);
+    document.getElementById('row-w-' + rowNum).value = Math.round(state.w * 10) / 10;
+    document.getElementById('row-h-' + rowNum).value = Math.round(state.h * 10) / 10;
+    row.dataset.points = JSON.stringify(state.points);
+    row.dataset.shapeCfg = JSON.stringify(cfg);
+    updateShapeBtn(rowNum);
+  } else if (shapeBuilderTarget.piece) {
+    const piece = shapeBuilderTarget.piece;
+    const scale = pxPerCm(piece.slabId);
+    piece.w = Math.round(state.w * 10) / 10;
+    piece.h = Math.round(state.h * 10) / 10;
+    piece.shapePoints = state.points;
+    piece.shapeCfg = cfg;
+    piece.el.style.width = (piece.w * scale) + 'px';
+    piece.el.style.height = (piece.h * scale) + 'px';
+    const connTag = (piece.label.match(/\(\d\/\d\)/) || [''])[0];
+    piece.label = piece.w + '×' + piece.h + (connTag ? ' ' + connTag : '');
+    piece.el.querySelector('.piece-label').textContent = piece.label;
+    renderShapeOverlay(piece);
+    if (piece.connId) updateConnectionVisual(piece);
+    if (selectedPiece && selectedPiece.id === piece.id) updateSelectedPiecePanel();
+  }
   closeShapeModal();
 }
 
 function clearShapeBuilder() {
-  const row = document.getElementById('row-' + shapeBuilderRow);
-  delete row.dataset.points;
-  delete row.dataset.shapeCfg;
-  updateShapeBtn(shapeBuilderRow);
+  if (shapeBuilderTarget.row != null) {
+    const row = document.getElementById('row-' + shapeBuilderTarget.row);
+    delete row.dataset.points;
+    delete row.dataset.shapeCfg;
+    updateShapeBtn(shapeBuilderTarget.row);
+  } else if (shapeBuilderTarget.piece) {
+    const piece = shapeBuilderTarget.piece;
+    piece.shapePoints = null;
+    piece.shapeCfg = null;
+    renderShapeOverlay(piece);
+  }
   closeShapeModal();
 }
 
@@ -1920,6 +1966,20 @@ function generatePieces(slabId) {
   const slab = slabs.find(s => s.id === slabId);
   if (!slab || !slab.img) { alert('העלה תמונת לוח קודם 📷'); return; }
 
+  // כפתור זה תמיד יוצר עותק חדש של *כל* השורות במחשבון — חלקים שלא נכנסים ללוח הזה
+  // כבר עוברים אוטומטית ללוח הבא (arrangeOptimal → moveOverflowToNextSlab), אז לוחצים
+  // עליו פעם אחת על הלוח הראשון, לא שוב על כל לוח. לחיצה חוזרת = כפילות, אז מתריעים.
+  if (pieces.length > 0) {
+    const proceed = confirm(
+      'יש כבר ' + pieces.length + ' חלקים בפרויקט (כולל בלוחות אחרים/באזור ההמתנה).\n\n' +
+      'כפתור זה תמיד יוצר עותק חדש של כל השורות במחשבון — חלקים שלא נכנסים כבר עוברים ' +
+      'אוטומטית ללוח הבא בעצמם. אם רק רצית שהחלקים העודפים יעברו ללוח הזה — לחץ ביטול, ' +
+      'וסגור ותלחץ "📐 סידור אופטימלי" בלוח שבו כבר יש חלקים במקום.\n\n' +
+      'להמשיך וליצור עוד עותק מלא של כל השורות?'
+    );
+    if (!proceed) return;
+  }
+
   const rows = document.querySelectorAll('.piece-row');
   let stackOffset = 0;
 
@@ -2064,18 +2124,20 @@ function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel,
   el.style.height = hPx + 'px';
   el.style.borderColor = isCutout ? '#fff' : color;
   el.style.background = isCutout ? 'rgba(255,255,255,0.55)' : 'transparent';
+  el.style.setProperty('--piece-color', color); // בשימוש רק כשהחלק יושב באזור ההמתנה (אין שם תמונת רקע)
 
   const label = (isCutout ? '🕳️ ' : '') + wCm + '×' + hCm + (connLabel ? ' ' + connLabel : '');
   el.innerHTML = `
     <span class="ctrl-btn rotate-btn" title="סבב 90°">🔄</span>
     <span class="ctrl-btn edit-btn" title="ערוך מידות">✎</span>
+    <span class="ctrl-btn shape-edit-btn" title="ערוך צורה">🔷</span>
     <span class="ctrl-btn del-btn" title="מחק">✕</span>
     <span class="piece-label">${label}</span>
   `;
 
   document.getElementById('stage-' + slabId).appendChild(el);
 
-  const piece = { id, el, w: wCm, h: hCm, x, y, rotated: false, rotIndex: 0, color, label, isCutout: !!isCutout, connId: connId || null, slabId, shapePoints: points || null };
+  const piece = { id, el, w: wCm, h: hCm, x, y, rotated: false, rotIndex: 0, color, label, isCutout: !!isCutout, connId: connId || null, slabId, shapePoints: points || null, shapeCfg: null };
   pieces.push(piece);
   renderShapeOverlay(piece);
 
@@ -2096,6 +2158,11 @@ function createPiece(wCm, hCm, color, x, y, isCutout, slabId, connId, connLabel,
   el.querySelector('.edit-btn').addEventListener('click', e => {
     e.stopPropagation();
     openEditPopover(piece);
+  });
+
+  el.querySelector('.shape-edit-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    openShapeBuilderForPiece(piece);
   });
 
   el.querySelector('.del-btn').addEventListener('click', e => {
