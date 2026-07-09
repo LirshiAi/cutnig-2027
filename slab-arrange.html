@@ -396,7 +396,8 @@
       <button class="btn-add-dxf" id="dxf-add-btn" style="display:none" onclick="addDxfToCalc()">+ הוסף למחשבון</button>
 
       <h3 style="margin-top:20px">03 — מחשבון חלקים</h3>
-      <div class="hint">💡 מלא כאן רשימת חלקים, ואז בכל לוח (בצד ימין) יש כפתור "הוסף חלקים מהמחשבון" שמכניס את הרשימה הזו אליו</div>
+      <div class="hint">💡 מלא כאן רשימת חלקים, ואז בלוח הראשון (בצד ימין) יש כפתור "הוסף חלקים מהמחשבון" שמכניס את כל הרשימה אליו — ומה שלא נכנס עובר אוטומטית ללוח הבא. לא צריך ללחוץ שוב על כל לוח בנפרד.<br>
+      🔲 = צורה מיוחדת (לא מלבן) &nbsp; · &nbsp; 🕳️ = סמן שהחלק הזה הוא פתח לחיתוך (כיור/כיריים), לא חתיכת שיש</div>
       <div id="pieces-calc"></div>
       <button class="btn-add-row" onclick="addRow()">+ הוסף שורה</button>
       <button class="btn-secondary" onclick="clearAll()">🗑️ נקה הכל (כל הלוחות)</button>
@@ -2700,7 +2701,7 @@ function saveProjectPrompt() {
 
 function loadProjectPrompt() {
   const name = document.getElementById('saved-projects-select').value;
-  if (!name) return;
+  if (!name) { alert('אין פרויקט נבחר — קודם בחר פרויקט מהרשימה "הפרויקטים השמורים שלי" (ואם הרשימה ריקה, עדיין לא שמרת אף פרויקט).'); return; }
   const raw = localStorage.getItem('slabarrange_project_' + name);
   if (!raw) { alert('הפרויקט לא נמצא'); return; }
   if (!confirm('לטעון את "' + name + '"? כל מה שיש כרגע על המסך יוחלף.')) return;
@@ -2711,7 +2712,7 @@ function loadProjectPrompt() {
 function deleteProjectPrompt() {
   if (window.__SLAB_VIEW_ONLY__) return;
   const name = document.getElementById('saved-projects-select').value;
-  if (!name) return;
+  if (!name) { alert('אין פרויקט נבחר — קודם בחר פרויקט מהרשימה "הפרויקטים השמורים שלי".'); return; }
   if (!confirm('למחוק את הפרויקט השמור "' + name + '"? זה לא ניתן לביטול.')) return;
   localStorage.removeItem('slabarrange_project_' + name);
   const names = getSavedProjectNames().filter(n => n !== name);
