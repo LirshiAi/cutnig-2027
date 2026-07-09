@@ -75,6 +75,13 @@
   .shape-corner-cell .dims input { width:100%; font-size:12px; padding:6px 7px; }
   .shape-field-row { display:flex; gap:10px; align-items:center; margin-bottom:10px; }
   .shape-field-row label { font-size:12px; color:#5a5540; display:flex; flex-direction:column; gap:4px; flex:1; }
+  .lshape-corner-btn {
+    border:1.5px solid #ddd6c5; border-radius:10px; background:#faf8f3; cursor:pointer;
+    padding:10px; display:flex; align-items:center; justify-content:center;
+  }
+  .lshape-corner-btn:hover { border-color:#c9973a; }
+  .lshape-corner-btn.active { border-color:#c9973a; background:rgba(201,151,58,0.12); }
+  .shape-dim-label { font-size:11px; fill:#8a7a52; font-weight:700; }
   .shape-field-row input, .shape-field-row select { font-size:13px; padding:8px 9px; border-radius:8px; border:1px solid #ddd6c5; background:#faf8f3; }
 
   /* 3D FOLD PREVIEW — קיפול קצוות (דופן/מפל) סביב ציר נבחר */
@@ -553,6 +560,24 @@ function parseCustomPoints(text) {
 }
 
 let shapeBuilderRow = null;
+let lshapeSelectedCorner = 'br';
+
+// אייקון ממוזער — מלבן עם "נגיסה" בפינה הרלוונטית, כדי לבחור פינה ויזואלית בלי לקרוא טקסט
+function lshapeCornerIcon(k) {
+  const notch = {
+    tl: '0,7 7,7 7,0 24,0 24,24 0,24',
+    tr: '0,0 17,0 17,7 24,7 24,24 0,24',
+    bl: '0,0 24,0 24,24 7,24 7,17 0,17',
+    br: '0,0 24,0 24,17 17,17 17,24 0,24'
+  }[k];
+  return `<svg width="26" height="26" viewBox="0 0 24 24"><polygon points="${notch}" fill="rgba(201,151,58,0.25)" stroke="#c9973a" stroke-width="1.5"></polygon></svg>`;
+}
+
+function setLShapeCorner(k) {
+  lshapeSelectedCorner = k;
+  ['tl','tr','bl','br'].forEach(c => document.getElementById('lshape-btn-' + c).classList.toggle('active', c === k));
+  renderShapePreview();
+}
 
 function ensureShapeModal() {
   if (document.getElementById('shape-modal')) return;
@@ -565,7 +590,8 @@ function ensureShapeModal() {
       <div class="shape-field-row">
         <label>סוג צורה
           <select id="shape-type" onchange="onShapeTypeChange()">
-            <option value="corners">פינות חתוכות (L-שייפ / כמה פינות)</option>
+            <option value="lshape">צורת ר׳ / L-שייפ (הכי נפוץ)</option>
+            <option value="corners">כמה פינות חתוכות ביחד (מתקדם)</option>
             <option value="chamfer">פינה משופעת 45°</option>
             <option value="notch">חריץ באמצע צלע</option>
             <option value="custom">מותאם אישית — רשימת נקודות</option>
@@ -573,19 +599,32 @@ function ensureShapeModal() {
         </label>
       </div>
       <div class="shape-field-row" id="shape-wh-row">
-        <label>אורך כולל W (ס"מ) <input type="number" id="shape-W" value="100" oninput="renderShapePreview()"></label>
-        <label>רוחב כולל H (ס"מ) <input type="number" id="shape-H" value="60" oninput="renderShapePreview()"></label>
+        <label>אורך כולל W (ס"מ) <input type="number" id="shape-W" value="200" oninput="renderShapePreview()"></label>
+        <label>רוחב כולל H (ס"מ) <input type="number" id="shape-H" value="100" oninput="renderShapePreview()"></label>
+      </div>
+
+      <div id="shape-panel-lshape">
+        <div class="hint" style="margin-top:0">בחר איזו פינה "חסרה" (שם עומד הארון/הקיר), ותן את מידות הזיז שנחתך שם — בדיוק כמו משטח בצורת ר׳ עם כיור בצד אחד וגז בצד השני.</div>
+        <div class="shape-corner-grid">
+          ${['tl', 'tr', 'bl', 'br'].map(k => `
+            <button type="button" class="lshape-corner-btn" id="lshape-btn-${k}" onclick="setLShapeCorner('${k}')" title="${({ tl: 'פינה שמאל-עליונה', tr: 'פינה ימין-עליונה', bl: 'פינה שמאל-תחתונה', br: 'פינה ימין-תחתונה' })[k]}">${lshapeCornerIcon(k)}</button>
+          `).join('')}
+        </div>
+        <div class="shape-field-row">
+          <label>כמה לחתוך לאורך (ס"מ) <input type="number" id="lshape-w" value="60" oninput="renderShapePreview()"></label>
+          <label>כמה לחתוך לרוחב (ס"מ) <input type="number" id="lshape-h" value="40" oninput="renderShapePreview()"></label>
+        </div>
       </div>
 
       <div id="shape-panel-corners">
-        <div class="hint" id="corner-hint" style="margin-top:0">סמן אילו פינות חתוכות ותן לכל אחת רוחב/גובה זיז. פינה אחת = L-שייפ. כמה פינות = צורה ייחודית (למשל אי צמוד לשני קירות).</div>
+        <div class="hint" id="corner-hint" style="margin-top:0">סמן אילו פינות חתוכות ותן לכל אחת מידות זיז. כמה פינות ביחד = צורה ייחודית (למשל אי צמוד לשני קירות).</div>
         <div class="shape-corner-grid">
           ${['tl','tr','bl','br'].map(k => `
             <div class="shape-corner-cell" id="corner-cell-${k}">
               <label class="chk"><input type="checkbox" id="corner-on-${k}" onchange="onCornerToggle('${k}')"> ${({tl:'פינה שמאל-עליונה',tr:'פינה ימין-עליונה',bl:'פינה שמאל-תחתונה',br:'פינה ימין-תחתונה'})[k]}</label>
               <div class="dims">
-                <input type="number" id="corner-w-${k}" placeholder="רוחב זיז" disabled oninput="renderShapePreview()">
-                <input type="number" id="corner-h-${k}" placeholder="גובה זיז" disabled oninput="renderShapePreview()">
+                <input type="number" id="corner-w-${k}" placeholder="חיתוך לאורך" disabled oninput="renderShapePreview()">
+                <input type="number" id="corner-h-${k}" placeholder="חיתוך לרוחב" disabled oninput="renderShapePreview()">
               </div>
             </div>
           `).join('')}
@@ -621,8 +660,9 @@ function ensureShapeModal() {
       </div>
 
       <div style="display:flex; justify-content:center; padding:6px 0;">
-        <svg id="shape-preview-svg" width="260" height="180" style="background:#f7f2e4; border:1px solid #e8dfc8; border-radius:10px;">
+        <svg id="shape-preview-svg" width="320" height="220" style="background:#f7f2e4; border:1px solid #e8dfc8; border-radius:10px;">
           <polygon id="shape-preview-poly" fill="rgba(201,151,58,0.18)" stroke="#c9973a" stroke-width="2"></polygon>
+          <g id="shape-preview-labels"></g>
         </svg>
       </div>
       <div id="shape-error" style="color:#c0392b; font-size:12px; min-height:16px;"></div>
@@ -640,17 +680,21 @@ function ensureShapeModal() {
 function onShapeTypeChange() {
   const type = document.getElementById('shape-type').value;
   const showCorners = type === 'corners' || type === 'chamfer';
+  document.getElementById('shape-panel-lshape').style.display = type === 'lshape' ? 'block' : 'none';
   document.getElementById('shape-panel-corners').style.display = showCorners ? 'block' : 'none';
   document.getElementById('shape-panel-notch').style.display = type === 'notch' ? 'block' : 'none';
   document.getElementById('shape-panel-custom').style.display = type === 'custom' ? 'block' : 'none';
   document.getElementById('shape-wh-row').style.display = type === 'custom' ? 'none' : 'flex';
   document.getElementById('corner-hint').textContent = type === 'chamfer'
-    ? 'סמן אילו פינות משופעות ותן לכל אחת את גודל השיפוע לרוחב/לגובה (חיתוך 45° בקצה, לא זווית חדה).'
-    : 'סמן אילו פינות חתוכות ותן לכל אחת רוחב/גובה זיז. פינה אחת = L-שייפ. כמה פינות = צורה ייחודית (למשל אי צמוד לשני קירות).';
+    ? 'סמן אילו פינות משופעות ותן לכל אחת את גודל השיפוע לאורך/לרוחב (חיתוך 45° בקצה, לא זווית חדה).'
+    : 'סמן אילו פינות חתוכות ותן לכל אחת מידות זיז. כמה פינות ביחד = צורה ייחודית (למשל אי צמוד לשני קירות).';
   ['tl','tr','bl','br'].forEach(k => {
-    document.getElementById('corner-w-' + k).placeholder = type === 'chamfer' ? 'שיפוע רוחב' : 'רוחב זיז';
-    document.getElementById('corner-h-' + k).placeholder = type === 'chamfer' ? 'שיפוע גובה' : 'גובה זיז';
+    document.getElementById('corner-w-' + k).placeholder = type === 'chamfer' ? 'שיפוע לאורך' : 'חיתוך לאורך';
+    document.getElementById('corner-h-' + k).placeholder = type === 'chamfer' ? 'שיפוע לרוחב' : 'חיתוך לרוחב';
   });
+  if (type === 'lshape') {
+    ['tl','tr','bl','br'].forEach(c => document.getElementById('lshape-btn-' + c).classList.toggle('active', c === lshapeSelectedCorner));
+  }
   renderShapePreview();
 }
 
@@ -675,6 +719,13 @@ function readShapeBuilderState() {
   const W = parseFloat(document.getElementById('shape-W').value);
   const H = parseFloat(document.getElementById('shape-H').value);
   if (!(W > 0) || !(H > 0)) return null;
+  if (type === 'lshape') {
+    const cw = parseFloat(document.getElementById('lshape-w').value) || 0;
+    const ch = parseFloat(document.getElementById('lshape-h').value) || 0;
+    if (!(cw > 0) || cw >= W || !(ch > 0) || ch >= H) return null;
+    const cuts = {}; cuts[lshapeSelectedCorner] = { w: cw, h: ch };
+    return { points: buildCornerCutPoints(W, H, cuts), w: W, h: H };
+  }
   if (type === 'corners' || type === 'chamfer') {
     const cuts = {};
     let any = false;
@@ -706,13 +757,23 @@ function renderShapePreview() {
   const errEl = document.getElementById('shape-error');
   const state = readShapeBuilderState();
   const poly = document.getElementById('shape-preview-poly');
-  if (!state) { poly.setAttribute('points', ''); errEl.textContent = 'מידות לא שלמות/לא תקינות עדיין'; return; }
+  const labels = document.getElementById('shape-preview-labels');
+  if (!state) { poly.setAttribute('points', ''); labels.innerHTML = ''; errEl.textContent = 'מידות לא שלמות/לא תקינות עדיין'; return; }
   errEl.textContent = '';
-  const svg = document.getElementById('shape-preview-svg');
-  const pad = 16, availW = 260 - pad * 2, availH = 180 - pad * 2;
+  const W = 320, H = 220, pad = 34;
+  const availW = W - pad * 2, availH = H - pad * 2;
   const scale = Math.min(availW / state.w, availH / state.h);
-  const offX = (260 - state.w * scale) / 2, offY = (180 - state.h * scale) / 2;
+  const offX = (W - state.w * scale) / 2, offY = (H - state.h * scale) / 2;
   poly.setAttribute('points', state.points.map(p => `${offX + p[0] * scale},${offY + p[1] * scale}`).join(' '));
+
+  // תוויות מידה — אורך כולל למעלה, רוחב כולל בצד, כדי שברור בדיוק למה כל מספר בטופס מתייחס
+  const lbl = (x, y, text, anchor) => `<text class="shape-dim-label" x="${x}" y="${y}" text-anchor="${anchor || 'middle'}">${text}</text>`;
+  let html = '';
+  html += `<line x1="${offX}" y1="${offY - 10}" x2="${offX + state.w * scale}" y2="${offY - 10}" stroke="#c9973a" stroke-width="1"></line>`;
+  html += lbl(offX + state.w * scale / 2, offY - 15, state.w + ' ס"מ (אורך כולל)');
+  html += `<line x1="${offX - 10}" y1="${offY}" x2="${offX - 10}" y2="${offY + state.h * scale}" stroke="#c9973a" stroke-width="1"></line>`;
+  html += `<text class="shape-dim-label" x="${offX - 16}" y="${offY + state.h * scale / 2}" text-anchor="middle" transform="rotate(-90 ${offX - 16} ${offY + state.h * scale / 2})">${state.h} ס"מ (רוחב כולל)</text>`;
+  labels.innerHTML = html;
 }
 
 function openShapeBuilder(rowNum) {
@@ -721,9 +782,18 @@ function openShapeBuilder(rowNum) {
   const row = document.getElementById('row-' + rowNum);
   const cfg = row.dataset.shapeCfg ? JSON.parse(row.dataset.shapeCfg) : null;
 
-  document.getElementById('shape-type').value = cfg ? cfg.type : 'corners';
-  document.getElementById('shape-W').value = cfg ? cfg.W : (parseFloat(document.getElementById('row-w-' + rowNum).value) || 100);
-  document.getElementById('shape-H').value = cfg ? cfg.H : (parseFloat(document.getElementById('row-h-' + rowNum).value) || 60);
+  document.getElementById('shape-type').value = cfg ? cfg.type : 'lshape';
+  document.getElementById('shape-W').value = cfg ? cfg.W : (parseFloat(document.getElementById('row-w-' + rowNum).value) || 200);
+  document.getElementById('shape-H').value = cfg ? cfg.H : (parseFloat(document.getElementById('row-h-' + rowNum).value) || 100);
+  if (cfg && cfg.type === 'lshape') {
+    lshapeSelectedCorner = cfg.corner || 'br';
+    document.getElementById('lshape-w').value = cfg.cutW || 60;
+    document.getElementById('lshape-h').value = cfg.cutH || 40;
+  } else {
+    lshapeSelectedCorner = 'br';
+    document.getElementById('lshape-w').value = 60;
+    document.getElementById('lshape-h').value = 40;
+  }
   ['tl','tr','br','bl'].forEach(k => {
     const c = cfg && cfg.cuts && cfg.cuts[k];
     document.getElementById('corner-on-' + k).checked = !!c;
@@ -763,7 +833,11 @@ function applyShapeBuilder() {
     cfg.customText = document.getElementById('custom-points').value;
   } else {
     cfg.W = state.w; cfg.H = state.h;
-    if (type === 'corners' || type === 'chamfer') {
+    if (type === 'lshape') {
+      cfg.corner = lshapeSelectedCorner;
+      cfg.cutW = parseFloat(document.getElementById('lshape-w').value) || 0;
+      cfg.cutH = parseFloat(document.getElementById('lshape-h').value) || 0;
+    } else if (type === 'corners' || type === 'chamfer') {
       cfg.cuts = {};
       ['tl','tr','br','bl'].forEach(k => {
         if (document.getElementById('corner-on-' + k).checked) {
